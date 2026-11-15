@@ -78,8 +78,9 @@ Ronde habis → podium 3 besar → ronde baru
 ### 2.2 Spawn acak
 Spawn **bebas dan acak**, tidak pakai slot tetap seperti prototipe (24 slot cincin).
 - Ambil titik acak di daratan yang **boleh dibangun**: bukan air, bukan puncak gunung, bukan sungai, kemiringan rendah.
-- Jarak minimal ke kastil lain: **14 m** (skala peta 160 m). Jarak minimal ke altar boss di tengah: **20 m**.
-- Coba hingga 40 kali. Kalau gagal, turunkan jarak minimal 2 m dan ulangi (sampai batas 8 m).
+- Jarak minimal ke kastil lain: **10 m** (peta 192×144 m). Jarak minimal ke altar naga: **16 m**.
+- Coba hingga 40 kali. Kalau gagal, turunkan jarak minimal 1,5 m dan ulangi (sampai batas 7 m).
+- Pulau kecil yang tidak tersambung ke benua tidak dipakai untuk spawn (pasukan darat tidak bisa menyeberang).
 - Kalau tetap gagal atau jumlah kerajaan sudah di batas, pemain masuk **antrean**.
 - Kerajaan baru dapat **perisai pemula 45 detik**: tidak bisa diserang, pasukannya juga tidak menyerang keluar. Kubah transparan warna bendera.
 
@@ -242,7 +243,7 @@ Pojok kanan atas: titik warna tiap kerajaan, wilayah, posisi naga. Dari prototip
 ## 5. Dunia
 
 ### 5.1 Peta
-Benua tunggal ~160×160 m mengikuti layout [gambar referensi](../notes/peta-terrain.md):
+Benua tunggal di peta 192×144 m (grid 128×96, sel 1,5 m) mengikuti layout [gambar referensi](../notes/peta-terrain.md):
 - Utara: dataran pasir/stepa terang dengan tulang naga.
 - Tengah-utara: rangkaian pegunungan diagonal (tidak bisa dibangun, bisa dilewati lewat celah).
 - Timur laut: gurun oranye + pulau-pulau kecil + menara di pulau.

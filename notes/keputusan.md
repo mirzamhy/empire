@@ -16,3 +16,4 @@ Format: `D-xxx` · tanggal · keputusan · alasan. Keputusan baru ditambah di ba
 - **D-008** · 2026-11-15 · Batas 40 kerajaan aktif dan 360 unit global. · Anggaran render yang sama dengan DEADZONE; label nama masih terbaca di 1080×1920.
 - **D-009** · 2026-11-15 · Port game 5200, bridge 8788. · 5190/8787 dipakai DEADZONE, 5195–5198 proyek lain.
 - **D-010** · 2026-11-15 · Peta referensi dipakai sebagai acuan layout, terrain dibuat ulang prosedural dari mask biome. · Lisensi gambar belum jelas, dan terrain 3D tetap perlu heightmap sendiri.
+- **D-011** · 2026-11-15 · Peta 192×144 m (grid 128×96 dari gambar, sel 1,5 m), jarak kastil minimal 10 m, pulau terpisah tidak dipakai spawn. Sungai belum ada di mask (terlalu tipis di gambar). · Dengan 14 m, 40 kastil tidak muat di daratan yang bisa dibangun. Diukur di `tests/map.test.ts`.

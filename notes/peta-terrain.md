@@ -32,3 +32,10 @@ Prototipe membuat benua bundar dengan 4 bioma (utara es, barat hutan, selatan gu
 
 ## Lisensi
 Asal gambar belum diketahui. Kalau gambar dari pembuat peta pihak ketiga, jangan tampilkan gambarnya di siaran; cukup jadikan acuan layout, terrain tetap dibuat ulang secara prosedural. Lihat [Pertanyaan terbuka](pertanyaan-terbuka.md).
+
+## Status F1 (2026-11-15)
+- `tools/sample-map.ps1` mengecilkan gambar ke 128×96 dan menyimpan warna rata-rata per sel.
+- `tools/classify.mjs` mengubah warna jadi biome: biru = air, hijau = hutan, oranye = gurun, gelap = gunung, sisanya pasir.
+- `tools/build-map.mjs` merapikan (filter mayoritas 3×3), menambah pantai, lalu menulis `game/src/sim/mapdata.ts`.
+- `game/src/sim/map.ts`: tinggi, komponen daratan, sel boleh-bangun, altar, BFS distance field untuk navigasi.
+- Altar dipilih di dataran terdekat pusat benua yang berjarak ≥6 sel dari gunung dan ≥7 sel dari air.

@@ -4,3 +4,4 @@ dist/
 .env
 .obsidian/
 .claude/
+tools/map-rgb.json
