@@ -17,12 +17,15 @@ export function bakeGroup(root: THREE.Object3D, relativeTo?: THREE.Object3D): TH
   const tint: number[] = [];
   const m = new THREE.Matrix4();
   const v = new THREE.Vector3();
-  root.traverse((o) => {
+  const visit = (o: THREE.Object3D) => {
+    if (!o.visible) return;
+    o.children.forEach(visit);
     const mesh = o as THREE.Mesh;
-    if (!mesh.isMesh || !mesh.visible) return;
+    if (!mesh.isMesh) return;
     const mat = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshBasicMaterial;
     const c = mat.color ? mat.color.clone() : new THREE.Color(1, 1, 1);
-    const isTint = mat.userData?.tint === true || c.getHex() === TINT_MARKER;
+    // Textured prototype parts (heraldic chest, quartered shield) are painted in the kingdom colour.
+    const isTint = mat.userData?.tint === true || c.getHex() === TINT_MARKER || !!mat.map;
     if (isTint) c.setRGB(1, 1, 1);
     const glow = mat.type === "MeshBasicMaterial" ? 1 : 0;
     const g = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
@@ -34,7 +37,8 @@ export function bakeGroup(root: THREE.Object3D, relativeTo?: THREE.Object3D): TH
       col.push(c.r, c.g, c.b);
       tint.push(isTint ? 1 : glow ? -1 : 0);
     }
-  });
+  };
+  visit(root);
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));

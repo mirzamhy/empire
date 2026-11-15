@@ -134,7 +134,7 @@ export function buildTerrain(map: WorldMap): TerrainHandles {
     const p = map.cellCenter(i);
     const r = rng.next();
     let kind: keyof typeof kinds | null = null;
-    if (b === "forest" && r < 0.55) kind = rng.next() < 0.6 ? "oak" : "pine";
+    if (b === "forest" && r < 0.3) kind = rng.next() < 0.6 ? "oak" : "pine";
     else if (b === "plains" && r < 0.04) kind = "oak";
     else if (b === "desert" && r < 0.05) kind = "palm";
     else if (b === "mountain" && r < 0.12) kind = rng.next() < 0.5 ? "pine" : "rock";
@@ -143,7 +143,7 @@ export function buildTerrain(map: WorldMap): TerrainHandles {
     const x = p.x + (rng.next() - 0.5) * CELL * 0.8;
     const z = p.z + (rng.next() - 0.5) * CELL * 0.8;
     if (Math.hypot(x - map.altar.x, z - map.altar.z) < 12) continue;
-    const s = 0.8 + rng.next() * 0.45;
+    const s = 0.65 + rng.next() * 0.35;
     q.setFromAxisAngle(up, rng.next() * Math.PI * 2);
     mtx.compose(new THREE.Vector3(x, map.heightAt(x, z) - 0.05, z), q, new THREE.Vector3(s, s, s));
     spots[kind].push(mtx.clone());

@@ -52,7 +52,7 @@
     "attackCooldown": 0.9,
     "aggroRange": 14,
     "retargetSeconds": 0.5,
-    "separation": 0.9
+    "separation": 1.2
   },
   "unitTypes": {
     "spearman":    { "hp": 120, "dmg": 15, "range": 1.6, "speed": 4.2, "scale": 0.42 },

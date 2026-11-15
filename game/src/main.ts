@@ -1,39 +1,54 @@
-// EMPIRE game entry. F1: terrain from the reference map and random castle spawns on "ikut".
+// EMPIRE game entry. F3: sim + terrain + castles + instanced units. ?studio shows all 10 unit models.
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { SCHEMA_VERSION, validateCommand, type GameStatusMessage } from "../../shared/contract";
 import { BridgeClient } from "./net/bridgeClient";
+import { loadConfig, UNIT_TYPES } from "./sim/config";
 import { WorldMap } from "./sim/map";
-import { Rng } from "./sim/rng";
+import { Sim } from "./sim/world";
 import { buildTerrain } from "./render/terrain";
-import { buildCastle, buildShield } from "./render/castle";
 import { createScene } from "./render/scene";
+import { CastleRenderer } from "./render/castles";
+import { UnitRenderer } from "./render/units/units";
 
+const params = new URLSearchParams(location.search);
 const app = document.getElementById("app")!;
 const view = createScene(app);
 const map = new WorldMap();
 const terrain = buildTerrain(map);
 view.scene.add(terrain.group);
 const controls = new OrbitControls(view.camera, view.renderer.domElement);
-controls.target.set(0, 0, 0);
-controls.update();
 
-const COLORS = ["#9e2b25", "#1d4ed8", "#15803d", "#6d28d9", "#d97706", "#0f766e", "#be185d", "#0284c7", "#dc2626", "#4f46e5", "#b91c1c", "#ca8a04"];
-const rng = new Rng(Date.now() & 0xffff);
-const castles = new Map<string, { x: number; z: number }>();
+const sim = new Sim(loadConfig(), map, Number(params.get("seed") ?? (Date.now() & 0xffff)));
+const castles = new CastleRenderer(map, (x, z) => terrain.clearTrees(x, z, 5));
+const units = new UnitRenderer(map);
+units.warmup();
+view.scene.add(castles.group, units.group);
 
-function spawn(name: string) {
-  if (castles.has(name)) return;
-  const p = map.sampleSpawn(rng, [...castles.values()]);
-  if (!p) return;
-  castles.set(name, p);
-  const color = COLORS[castles.size % COLORS.length];
-  const c = buildCastle(1, color);
-  c.position.set(p.x, map.heightAt(p.x, p.z), p.z);
-  c.add(buildShield(color));
-  view.scene.add(c);
-  terrain.clearTrees(p.x, p.z, 5);
+if (params.has("studio")) {
+  // line up one of each unit next to the altar for model checks
+  const k = sim.join("studio", "Studio").kingdom!;
+  sim.units.length = 0;
+  UNIT_TYPES.forEach((t, i) => {
+    sim.addUnits("studio", "Studio", { [t]: 1 }, "studio", false);
+    const u = sim.units[sim.units.length - 1];
+    u.x = map.altar.x - 14 + i * 2.6;
+    u.z = map.altar.z + 12;
+    u.heading = 0;
+  });
+  k.x = map.altar.x + 100;
+  sim.paused = true;
+  terrain.group.children.forEach((c) => {
+    if ((c as THREE.InstancedMesh).isInstancedMesh) c.visible = false;
+  });
+  view.scene.background = new THREE.Color(0x363438);
+  controls.target.set(map.altar.x, 1, map.altar.z + 12);
+  view.camera.position.set(map.altar.x, 4, map.altar.z + 22);
+} else {
+  controls.target.set(0, 0, 0);
+  view.camera.position.set(0, 150, 110);
 }
+controls.update();
 
 const bridge = new BridgeClient(
   `ws://127.0.0.1:8788/ws/game`,
@@ -41,17 +56,24 @@ const bridge = new BridgeClient(
     const v = validateCommand(raw);
     if (!v.ok || v.cmd.type !== "game.live") return;
     const e = v.cmd.event;
-    if (e.kind === "chat" && /\b(ikut|join|gabung)\b/i.test(e.chat!.text)) spawn(e.user.username);
+    if (e.kind === "chat" && /\b(ikut|join|gabung)\b/i.test(e.chat!.text)) sim.join(e.user.username, e.user.displayName);
   },
   () => {},
 );
 bridge.connect();
 
 const clock = new THREE.Clock();
+let fps = 60;
 function frame() {
-  const t = clock.getElapsedTime();
+  const dt = clock.getDelta();
+  const t = clock.elapsedTime;
+  fps = fps * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
+  sim.advance(dt);
+  sim.drainEvents();
   terrain.altarCrystal.rotation.y = t * 1.6;
   terrain.water.position.y = -0.25 + Math.sin(t * 1.4) * 0.05;
+  castles.update(sim, t);
+  units.update(sim, t);
   controls.update();
   view.renderer.render(view.scene, view.camera);
   requestAnimationFrame(frame);
@@ -60,10 +82,11 @@ frame();
 
 setInterval(() => {
   const status: GameStatusMessage = {
-    schemaVersion: SCHEMA_VERSION, type: "game.status", roundId: 0, phase: "F1", secondsLeft: 0,
-    paused: false, safeMode: false, fps: 0, kingdoms: castles.size, units: 0, joinQueue: 0, leader: null,
+    schemaVersion: SCHEMA_VERSION, type: "game.status", roundId: sim.roundId, phase: sim.phase, secondsLeft: sim.secondsLeft(),
+    paused: sim.paused, safeMode: false, fps: Math.round(fps), kingdoms: sim.alive.length, units: sim.units.length,
+    joinQueue: sim.joinQueue.length, leader: sim.leaderboard()[0]?.name ?? null,
   };
   bridge.send(status);
 }, 1000);
 
-Object.assign(window, { __em: { map, view, spawn } });
+Object.assign(window, { __em: { sim, map, view, units, controls, render: () => view.renderer.render(view.scene, view.camera) } });
