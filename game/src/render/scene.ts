@@ -20,7 +20,7 @@ export function createScene(container: HTMLElement): SceneHandles {
   scene.background = new THREE.Color(0x163d4d);
   scene.fog = new THREE.Fog(0x163d4d, 160, 340);
 
-  const camera = new THREE.PerspectiveCamera(40, 9 / 16, 0.5, 600);
+  const camera = new THREE.PerspectiveCamera(55, 9 / 16, 0.5, 600);
   camera.position.set(0, 150, 110);
   camera.lookAt(0, 0, 0);
 
