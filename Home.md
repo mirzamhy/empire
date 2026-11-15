@@ -3,7 +3,8 @@
 Game TikTok LIVE perang kerajaan. Penonton ketik `ikut`, dapat kerajaan atas nama username, spawn acak, perang otomatis; gift menambah pasukan.
 
 ## Dokumen
-- [PRD](docs/PRD.md) — dokumen utama
+- [PRD](docs/PRD.md) — dokumen utama, status fase di §10
+- [README](README.md) — cara menjalankan
 
 ## Catatan
 - [Unit pasukan](notes/unit-pasukan.md) — 10 unit, stat, kemampuan

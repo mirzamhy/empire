@@ -1,8 +1,8 @@
 ---
 title: PRD — EMPIRE (game TikTok LIVE perang kerajaan)
-versi: 0.1 (draf)
+versi: 0.2
 tanggal: 2026-11-15
-status: draf, menunggu review
+status: F0–F5 selesai (2026-11-16), F6 sebagian, F7 belum
 tags: [prd, empire, tiktok-live]
 ---
 
@@ -105,7 +105,7 @@ Semua sumber menambah pasukan **ke kerajaan pengirim** sendiri.
 | Komentar | Tidak menambah pasukan | Hanya perintah |
 | Gift | Pasukan sesuai tier nilai gift | Lihat [Pemetaan gift](../notes/pemetaan-gift.md) |
 
-Ringkasan tier gift (nilai = koin × jumlah, dibaca dari connector):
+Ringkasan tier gift (nilai satu gift dalam koin; streak mengulang hadiahnya):
 
 | Nilai | Hadiah |
 |---|---|
@@ -382,6 +382,18 @@ Game `5200`, bridge `8788` (5190/8787 dipakai DEADZONE, 5195–5198 proyek lain)
 | F6 | Wilayah heksagon, Naga Dunia, perisai pemula, antrean | Ronde 15 menit penuh di mock tanpa error |
 | F7 | Uji LIVE nyata, kalibrasi mapping gift | Gift asli terpetakan semua, tidak ada gift dobel |
 | F8 (nanti) | Progress permanen, kosmetik bendera, musim | — |
+
+### Status (2026-11-16)
+| Fase | Status | Commit |
+|---|---|---|
+| F0 | Selesai | bridge, admin, game shell |
+| F1 | Selesai | benua dari gambar referensi, spawn acak |
+| F2 | Selesai | sim perang, 8 seed tanpa gift: 9–16 menit, pemenang beragam |
+| F3 | Selesai | 10 model prototipe sebagai InstancedMesh, 5 ms/frame di uji 30 kerajaan |
+| F4 | Selesai | router live, 31 test |
+| F5 | Selesai | HUD portrait, director, efek, naga |
+| F6 | Sebagian | wilayah, naga, perisai, antrean sudah ada; zona menyusut belum |
+| F7 | Belum | uji LIVE nyata dan kalibrasi gift |
 
 ---
 
