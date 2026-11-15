@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "round": {
+    "lobbySeconds": 60,
+    "warSeconds": 900,
+    "finalSeconds": 120,
+    "resultSeconds": 20,
+    "dragonAtSecond": 600
+  },
+  "kingdom": {
+    "maxActive": 40,
+    "startUnits": { "spearman": 10 },
+    "castleHp": 1600,
+    "castleHpPerLevel": 300,
+    "shieldSeconds": 45,
+    "rejoinCooldownSeconds": 60,
+    "reserveHoldSeconds": 60,
+    "spawnMinDist": 10,
+    "unitCapBase": 40,
+    "unitCapPerLevel": 10,
+    "unitCapMax": 140,
+    "marchAtUnits": 8,
+    "warTargetEverySeconds": 10,
+    "towerDamage": 14,
+    "towerDamagePerLevel": 3,
+    "towerRange": 10,
+    "towerCooldown": 1.2
+  },
+  "passive": {
+    "everySeconds": 8,
+    "maxUnits": 20,
+    "finalMultiplier": 2,
+    "unlocks": [
+      { "level": 1, "units": ["spearman"] },
+      { "level": 3, "units": ["spearman", "swordsman", "archer"] },
+      { "level": 8, "units": ["spearman", "swordsman", "archer", "cavalry", "wizard"] }
+    ]
+  },
+  "exp": {
+    "levelBase": 100,
+    "levelGrowth": 1.45,
+    "maxLevel": 10,
+    "killBase": 8,
+    "killPerMaxHp": 0.1,
+    "castleBase": 200,
+    "castlePerLevel": 60,
+    "unitHpPerLevel": 18,
+    "unitDmgPerLevel": 4
+  },
+  "units": {
+    "global": 360,
+    "attackCooldown": 0.9,
+    "aggroRange": 14,
+    "retargetSeconds": 0.5,
+    "separation": 0.9
+  },
+  "unitTypes": {
+    "spearman":    { "hp": 120, "dmg": 15, "range": 1.6, "speed": 4.2, "scale": 0.42 },
+    "swordsman":   { "hp": 155, "dmg": 20, "range": 1.5, "speed": 4.4, "scale": 0.42 },
+    "archer":      { "hp": 90,  "dmg": 18, "range": 9.0, "speed": 4.2, "scale": 0.42, "ranged": true },
+    "wizard":      { "hp": 110, "dmg": 32, "range": 8.0, "speed": 4.0, "scale": 0.44, "ranged": true, "splash": 1.5 },
+    "paladin":     { "hp": 220, "dmg": 25, "range": 1.7, "speed": 4.1, "scale": 0.46, "heal": 12, "healRange": 4 },
+    "necromancer": { "hp": 170, "dmg": 30, "range": 7.5, "speed": 4.0, "scale": 0.45, "ranged": true, "raise": 3 },
+    "cavalry":     { "hp": 250, "dmg": 32, "range": 1.9, "speed": 6.4, "scale": 0.40 },
+    "golem":       { "hp": 550, "dmg": 52, "range": 2.1, "speed": 3.1, "scale": 0.55, "arrowResist": 0.3 },
+    "dragon":      { "hp": 750, "dmg": 70, "range": 6.0, "speed": 5.8, "scale": 0.5, "flying": true, "splash": 2 },
+    "demon":       { "hp": 1100, "dmg": 95, "range": 2.4, "speed": 4.2, "scale": 0.62, "aura": 0.1, "auraRange": 6 },
+    "skeleton":    { "hp": 60,  "dmg": 10, "range": 1.5, "speed": 4.4, "scale": 0.38 }
+  },
+  "dragon": {
+    "hpBase": 1500,
+    "hpPerKingdom": 150,
+    "dmg": 95,
+    "splash": 3,
+    "range": 9,
+    "cooldown": 1.6,
+    "pullRange": 30,
+    "rewardExp": 3000,
+    "giftDamageBonus": 0.25
+  },
+  "territory": {
+    "tile": 4,
+    "captureSeconds": 3,
+    "castleRadius": 9
+  },
+  "score": {
+    "perTile": 2,
+    "perLevel": 50,
+    "perKill": 1,
+    "perCastle": 300
+  },
+  "orders": {
+    "durationSeconds": 40,
+    "cooldownSeconds": 15,
+    "defendRadius": 10
+  },
+  "hunted": { "weight": 0.35 }
+}
