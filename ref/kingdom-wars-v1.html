@@ -1,0 +1,1622 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Low-Poly Medieval Studio (~536 Tris) & TikTok Live Kingdom Wars</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #363438;
+            font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+            color: #f8fafc;
+            user-select: none;
+        }
+        #app-wrapper {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        .glass-panel {
+            background: rgba(24, 23, 27, 0.88);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        .btn-studio-active {
+            background: #b93829 !important;
+            border-color: #fca5a5 !important;
+            color: #ffffff !important;
+            box-shadow: 0 0 15px rgba(185, 56, 41, 0.45);
+        }
+        .btn-mode-active {
+            background: #f59e0b !important;
+            color: #090d16 !important;
+            font-weight: 800 !important;
+        }
+        .floating-3d-label {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 12;
+            white-space: nowrap;
+        }
+        @keyframes popToast {
+            0% { transform: translate(-50%, -20px) scale(0.85); opacity: 0; }
+            15% { transform: translate(-50%, 0) scale(1.03); opacity: 1; }
+            85% { transform: translate(-50%, 0) scale(1); opacity: 1; }
+            100% { transform: translate(-50%, -15px) scale(0.9); opacity: 0; }
+        }
+        .toast-banner {
+            animation: popToast 3.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: #18181b; }
+        ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 9999px; }
+    </style>
+</head>
+<body>
+
+<div id="app-wrapper">
+    <!-- 3D WebGL Canvas Container -->
+    <div id="canvas-container" class="w-full h-full cursor-grab active:cursor-grabbing"></div>
+
+    <!-- Floating 3D HTML Labels (▲ 536 tris label in Studio Mode + Castle HUDs in Battle Mode) -->
+    <div id="labels-layer" class="absolute inset-0 pointer-events-none overflow-hidden z-10">
+        <!-- Studio Mode "▲ 536 tris" label -->
+        <div id="wireframe-tri-label" class="floating-3d-label bg-zinc-900/90 border border-zinc-600/80 px-3 py-1 rounded-full text-xs font-extrabold tracking-wide text-zinc-100 shadow-xl flex items-center gap-1.5">
+            <span class="text-white text-sm">▲</span> <span id="floating-tri-text">536 tris</span>
+        </div>
+        <!-- Dynamic Kingdom Labels container -->
+        <div id="battle-labels-container" class="hidden"></div>
+    </div>
+
+    <!-- Center Toast Banner for Battle Events / Export Notification -->
+    <div id="banner-layer" class="fixed top-20 left-1/2 -translate-x-1/2 z-40 pointer-events-none"></div>
+
+    <!-- =================================================================== -->
+    <!-- TOP HEADER BAR: Global Mode Switcher + Render & Pose Controls        -->
+    <!-- =================================================================== -->
+    <div class="fixed top-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+        <!-- Brand & Main Mode Switcher -->
+        <div class="glass-panel p-1.5 rounded-2xl pointer-events-auto flex items-center gap-2 shadow-2xl">
+            <div class="flex bg-zinc-900/90 p-1 rounded-xl border border-zinc-700/70">
+                <button id="tab-studio" onclick="switchAppMode('studio')" class="btn-mode-active px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5">
+                    📐 Reference Studio (~536 Tris)
+                </button>
+                <button id="tab-battle" onclick="switchAppMode('battle')" class="px-3 py-1.5 rounded-lg text-xs font-bold text-zinc-300 hover:text-white transition flex items-center gap-1.5">
+                    ⚔️ Mode Battle TikTok Live
+                </button>
+            </div>
+            <div class="hidden sm:flex flex-col px-2">
+                <span class="text-[11px] font-extrabold text-white tracking-wide" id="header-title">ROYAL SPEARMAN REFERENCE SHEET</span>
+                <span class="text-[10px] text-emerald-400 font-mono" id="poly-counter">▲ 536 tris (Lofted Low-Poly Mesh)</span>
+            </div>
+        </div>
+
+        <!-- Studio Render Mode & Pose Toolbar (Visible in Studio Mode) -->
+        <div id="studio-top-toolbar" class="glass-panel p-1.5 rounded-2xl pointer-events-auto flex flex-wrap items-center gap-1.5 shadow-2xl">
+            <button onclick="setRenderMode('textured')" id="btn-textured" class="btn-studio-active px-2.5 py-1.5 rounded-xl text-xs font-bold border border-transparent transition">
+                🎨 Shaded + Heraldic
+            </button>
+            <button onclick="setRenderMode('clay')" id="btn-clay" class="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 transition">
+                📐 Clay + Wireframe (Ref)
+            </button>
+            <button onclick="setRenderMode('wireframe')" id="btn-wireframe" class="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 transition">
+                🕸️ Pure Wireframe
+            </button>
+
+            <div class="w-px h-5 bg-zinc-700 mx-0.5"></div>
+
+            <button onclick="setPose('guard')" id="btn-pose-guard" class="btn-studio-active px-2.5 py-1.5 rounded-xl text-xs font-bold border border-transparent transition">
+                🛡️ Pose: Guard
+            </button>
+            <button onclick="setPose('apose')" id="btn-pose-apose" class="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 transition">
+                🧍 Pose: A-Pose (Ref)
+            </button>
+            <button onclick="setPose('walk')" id="btn-pose-walk" class="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 transition">
+                ⚔️ Animasi Jalan & Serang
+            </button>
+        </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- STUDIO MODE PANELS: Left Unit/Color Selector + Right UV Atlas       -->
+    <!-- =================================================================== -->
+    <div id="studio-side-panels">
+        <!-- Left Panel: Unit Class Selector, Faction Color & .OBJ Exporter -->
+        <div class="fixed left-3 top-20 z-20 glass-panel p-3.5 rounded-2xl w-64 pointer-events-auto shadow-2xl space-y-3 max-h-[80vh] overflow-y-auto">
+            <div>
+                <div class="text-[10px] font-extrabold uppercase tracking-wider text-amber-400 mb-1.5">1. Pilih Varian Prajurit (Base Rig Sama)</div>
+                <div class="grid grid-cols-1 gap-1.5">
+                    <button onclick="selectUnit('spearman')" id="unit-spearman" class="btn-studio-active text-left px-3 py-2 rounded-xl text-xs font-bold bg-zinc-800/90 border border-zinc-700 flex justify-between items-center transition">
+                        <span>🔱 1. Royal Spearman (Ref)</span>
+                        <span class="text-[10px] font-mono opacity-85">536 Tris</span>
+                    </button>
+                    <button onclick="selectUnit('swordsman')" id="unit-swordsman" class="text-left px-3 py-2 rounded-xl text-xs font-bold bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-700 flex justify-between items-center transition">
+                        <span>🗡️ 2. Heavy Knight</span>
+                        <span class="text-[10px] font-mono opacity-75">Great Helm</span>
+                    </button>
+                    <button onclick="selectUnit('archer')" id="unit-archer" class="text-left px-3 py-2 rounded-xl text-xs font-bold bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-700 flex justify-between items-center transition">
+                        <span>🏹 3. Longbow Ranger</span>
+                        <span class="text-[10px] font-mono opacity-75">Hood + Bow</span>
+                    </button>
+                    <button onclick="selectUnit('king')" id="unit-king" class="text-left px-3 py-2 rounded-xl text-xs font-bold bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-700 flex justify-between items-center transition">
+                        <span>👑 4. Kingdom Warlord</span>
+                        <span class="text-[10px] font-mono opacity-75">Crown + Cape</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Faction Heraldic Colors -->
+            <div class="pt-2.5 border-t border-zinc-700/80">
+                <div class="text-[10px] font-extrabold uppercase tracking-wider text-sky-400 mb-2">2. Warna Bendera & Heraldik</div>
+                <div class="flex items-center justify-between gap-1.5">
+                    <button onclick="setFactionColor('#9e2b25', '#e2e4e6')" title="Crimson Red (Reference)" class="w-8 h-8 rounded-xl bg-[#9e2b25] border-2 border-white shadow-md hover:scale-105 transition"></button>
+                    <button onclick="setFactionColor('#1d4ed8', '#facc15')" title="Sriwijaya Royal Blue" class="w-8 h-8 rounded-xl bg-[#1d4ed8] border-2 border-zinc-500 hover:border-white hover:scale-105 transition"></button>
+                    <button onclick="setFactionColor('#15803d', '#ffffff')" title="Pajajaran Emerald" class="w-8 h-8 rounded-xl bg-[#15803d] border-2 border-zinc-500 hover:border-white hover:scale-105 transition"></button>
+                    <button onclick="setFactionColor('#6d28d9', '#fde047')" title="Mataram Imperial Purple" class="w-8 h-8 rounded-xl bg-[#6d28d9] border-2 border-zinc-500 hover:border-white hover:scale-105 transition"></button>
+                    <button onclick="setFactionColor('#18181b', '#ef4444')" title="Obsidian Black" class="w-8 h-8 rounded-xl bg-zinc-900 border-2 border-rose-500 hover:scale-105 transition"></button>
+                </div>
+            </div>
+
+            <!-- Reference Anatomy Checklist -->
+            <div class="pt-2.5 border-t border-zinc-700/80 text-[11px] text-zinc-300 space-y-1 leading-snug">
+                <div class="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1">Detail Geometri Referensi:</div>
+                <div>• <b>Helm Kettle 10-Segmen</b> berpinggiran miring & kubah lancip</div>
+                <div>• <b>Wajah Faceless</b> berahang tegas & rambut cokelat di belakang</div>
+                <div>• <b>Tunik Singa Putih</b> + sabuk gesper kuningan & belahan rok</div>
+                <div>• <b>Tangan Beribu-Jari</b> memegang Tombak Berlian & Heater Shield</div>
+            </div>
+
+            <!-- Export to Blender (.OBJ) -->
+            <div class="pt-2 border-t border-zinc-700/80">
+                <button onclick="exportCurrentCharacterOBJ()" class="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-extrabold text-xs shadow-lg transition flex items-center justify-center gap-1.5">
+                    📥 Download Model (.OBJ)
+                </button>
+            </div>
+        </div>
+
+        <!-- Bottom-Right Panel: Live 256x256 UV Texture Atlas Preview (Exact Match to Reference Sheet) -->
+        <div class="fixed bottom-3 right-3 z-20 glass-panel p-3 rounded-2xl pointer-events-auto shadow-2xl flex flex-col items-center">
+            <div class="w-full flex justify-between items-center mb-1.5 px-0.5">
+                <span class="text-[10px] font-extrabold uppercase tracking-wider text-zinc-200">UV Texture Atlas (256×256)</span>
+                <span class="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 rounded font-mono">1 Atlas</span>
+            </div>
+            <canvas id="uv-atlas-canvas" width="210" height="210" class="w-44 h-44 sm:w-52 sm:h-52 rounded-xl border border-zinc-600 shadow-inner bg-[#1b1a1c]"></canvas>
+        </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- TIKTOK LIVE BATTLE MODE UI OVERLAY (Hidden in Studio Mode)          -->
+    <!-- =================================================================== -->
+    <div id="battle-ui-panels" class="hidden">
+        <!-- Left: TikTok Live Stream Leaderboard & Kill Feed -->
+        <div class="fixed left-3 top-20 z-20 glass-panel p-3 rounded-2xl w-72 pointer-events-auto shadow-2xl space-y-2.5">
+            <div class="flex items-center justify-between border-b border-zinc-700/80 pb-2">
+                <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-full bg-gradient-to-tr from-rose-600 to-amber-500 flex items-center justify-center text-xs font-black">👑</div>
+                    <div>
+                        <div class="text-xs font-extrabold text-white flex items-center gap-1.5">
+                            KingdomWars.ID <span class="bg-rose-600 text-[9px] px-1.5 py-0.2 rounded font-black">LIVE</span>
+                        </div>
+                        <div class="text-[10px] text-zinc-400">Ketik <b class="text-amber-400">"ikut"</b> = Bikin Kerajaan!</div>
+                    </div>
+                </div>
+                <span id="battle-unit-count" class="text-[10px] font-mono font-bold bg-zinc-800 px-2 py-1 rounded-lg text-amber-300">0 Unit</span>
+            </div>
+
+            <!-- Leaderboard Kerajaan -->
+            <div>
+                <div class="text-[10px] font-extrabold uppercase tracking-wider text-amber-400 mb-1">🏆 Klasemen Raja (Kill = Naik Level!)</div>
+                <div id="battle-leaderboard" class="space-y-1 text-xs"></div>
+            </div>
+
+            <!-- Live Chat & Kill Log -->
+            <div>
+                <div class="text-[10px] font-extrabold uppercase tracking-wider text-sky-400 mb-1">💬 Komentar & Notifikasi Perang</div>
+                <div id="battle-chat-log" class="space-y-1 text-[11px] max-h-36 overflow-y-hidden flex flex-col justify-end"></div>
+            </div>
+        </div>
+
+        <!-- Right: Interactive TikTok Chat & Gift Spawner Control Panel -->
+        <div class="fixed right-3 top-20 z-20 glass-panel p-3.5 rounded-2xl w-80 pointer-events-auto shadow-2xl space-y-3">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-extrabold uppercase tracking-wider text-amber-400">🎮 Simulator Interaksi Penonton</span>
+                <button onclick="resetBattleArena()" class="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-rose-950 text-[10px] font-bold text-zinc-300 border border-zinc-700">
+                    🔄 Reset Peta
+                </button>
+            </div>
+
+            <!-- Chat Command Input -->
+            <div class="space-y-1.5 bg-zinc-900/90 p-2.5 rounded-xl border border-zinc-800">
+                <label class="text-[10px] font-bold text-zinc-400">Simulasi Ketik Komentar TikTok:</label>
+                <div class="flex gap-1.5">
+                    <input id="chat-user-input" type="text" value="@SultanSurabaya" placeholder="@Username" class="w-2/5 bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-white" />
+                    <input id="chat-cmd-input" type="text" value="ikut" placeholder="ikut / tombak / serang" onkeydown="if(event.key==='Enter') simulateViewerChat()" class="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-white" />
+                    <button onclick="simulateViewerChat()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold px-2.5 py-1.5 rounded-lg text-xs">
+                        Kirim
+                    </button>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5 pt-1">
+                    <button onclick="spawnRandomViewerKingdom()" class="bg-emerald-600/25 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-300 py-1.5 px-2 rounded-lg text-[11px] font-bold">
+                        ➕ Penonton Baru "ikut"
+                    </button>
+                    <button onclick="levelUpSelectedKingdom()" class="bg-amber-500/25 hover:bg-amber-500/40 border border-amber-500/40 text-amber-300 py-1.5 px-2 rounded-lg text-[11px] font-bold">
+                        ⚡ Naikkan Level Raja
+                    </button>
+                </div>
+            </div>
+
+            <!-- Target Kingdom Selector + Unit & Gift Summons -->
+            <div class="space-y-2 bg-zinc-900/90 p-2.5 rounded-xl border border-zinc-800">
+                <label class="text-[10px] font-bold text-sky-400">Pilih Kerajaan untuk Dikirim Pasukan / Gift:</label>
+                <select id="battle-kingdom-select" class="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs font-bold text-white"></select>
+
+                <div class="grid grid-cols-2 gap-1.5 pt-1">
+                    <button onclick="spawnBattleTroops('spearman', 4)" class="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-left">
+                        <div class="text-xs font-extrabold text-white">🔱 +4 Spearman</div>
+                        <div class="text-[9px] text-zinc-400">Komen "tombak" (536 Tris)</div>
+                    </button>
+                    <button onclick="spawnBattleTroops('swordsman', 4)" class="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-left">
+                        <div class="text-xs font-extrabold text-white">🗡️ +4 Heavy Knight</div>
+                        <div class="text-[9px] text-zinc-400">Gift Mawar (1 Koin)</div>
+                    </button>
+                    <button onclick="spawnBattleTroops('archer', 4)" class="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-left">
+                        <div class="text-xs font-extrabold text-white">🏹 +4 Longbow</div>
+                        <div class="text-[9px] text-zinc-400">50x Tap-Tap Like</div>
+                    </button>
+                    <button onclick="spawnBattleTroops('king', 2)" class="p-2 rounded-xl bg-gradient-to-r from-amber-950 to-rose-950 hover:from-amber-900 hover:to-rose-900 border border-amber-500/60 text-left">
+                        <div class="text-xs font-extrabold text-amber-300">👑 +2 Giant Warlord</div>
+                        <div class="text-[9px] text-amber-200">Gift Singa (+500 EXP!)</div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ============================================================================
+// 1. PROCEDURAL UV TEXTURE ATLAS GENERATOR (Sama Persis Gambar Referensi)
+// ============================================================================
+let currentPrimaryColor = '#9e2b25'; // Crimson Red dari gambar referensi
+let currentCrestColor = '#e2e4e6';   // Putih/Perak singa heraldik
+
+function drawLionRampant(ctx, cx, cy, scale, color) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Kepala, Jambul & Mulut Mengaum
+    ctx.beginPath();
+    ctx.arc(-2, -22, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(-12, -26, 8, 6);
+    // Jambul Singa
+    ctx.beginPath();
+    ctx.moveTo(4, -29); ctx.lineTo(12, -23); ctx.lineTo(5, -16);
+    ctx.fill();
+
+    // Badan Singa Melengkung (Rampant Torso)
+    ctx.beginPath();
+    ctx.moveTo(-5, -16);
+    ctx.quadraticCurveTo(12, -14, 9, 0);
+    ctx.quadraticCurveTo(5, 13, -7, 17);
+    ctx.quadraticCurveTo(-13, 8, -7, -2);
+    ctx.closePath();
+    ctx.fill();
+
+    // Cakar Depan Atas & Bawah
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(-4, -13); ctx.lineTo(-19, -23); ctx.lineTo(-24, -18);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(-5, -5); ctx.lineTo(-20, -4); ctx.lineTo(-24, -8);
+    ctx.stroke();
+
+    // Kaki Belakang Kiri & Kanan
+    ctx.beginPath();
+    ctx.moveTo(-5, 13); ctx.lineTo(-17, 27); ctx.lineTo(-23, 27);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(3, 12); ctx.lineTo(14, 26); ctx.lineTo(8, 28);
+    ctx.stroke();
+
+    // Ekor Heraldik Melengkung S ke Atas
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(5, 10);
+    ctx.bezierCurveTo(25, 8, 14, -22, 23, -26);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(23, -26, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+function updateUVAtlasCanvas() {
+    const canvas = document.getElementById('uv-atlas-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+
+    // Background gelap UV Atlas
+    ctx.fillStyle = '#1b1a1c';
+    ctx.fillRect(0, 0, W, H);
+
+    // 1. Kiri Atas: Tunik Merah + Singa Putih + Sabuk Kulit + Belahan Rok
+    ctx.fillStyle = currentPrimaryColor;
+    ctx.fillRect(8, 8, 88, 122);
+    // Kerah V gelap
+    ctx.fillStyle = '#2d2520';
+    ctx.beginPath();
+    ctx.moveTo(38, 8); ctx.lineTo(52, 22); ctx.lineTo(66, 8);
+    ctx.fill();
+    // Lambang Singa Putih di Tengah Dada
+    drawLionRampant(ctx, 52, 52, 0.82, currentCrestColor);
+    // Sabuk Kulit Cokelat & Gesper Kuningan
+    ctx.fillStyle = '#3b2618';
+    ctx.fillRect(8, 88, 88, 11);
+    ctx.strokeStyle = '#a88448';
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(45, 87, 14, 13);
+    // Belahan Rok Depan
+    ctx.fillStyle = '#1b1a1c';
+    ctx.fillRect(49, 102, 6, 28);
+
+    // 2. Tengah Atas: Unwrap Kulit Wajah & Tangan
+    ctx.fillStyle = '#dba06d';
+    ctx.fillRect(104, 10, 32, 46);
+    ctx.fillStyle = '#c68b59';
+    ctx.fillRect(104, 62, 32, 26);
+
+    // 3. Kanan Atas: Unwrap Kettle Helmet Besi
+    const helmGrad = ctx.createLinearGradient(144, 10, 202, 90);
+    helmGrad.addColorStop(0, '#9699a1');
+    helmGrad.addColorStop(1, '#55575c');
+    ctx.fillStyle = helmGrad;
+    ctx.beginPath();
+    ctx.moveTo(173, 10);
+    ctx.lineTo(202, 32);
+    ctx.lineTo(202, 90);
+    ctx.lineTo(144, 90);
+    ctx.lineTo(144, 32);
+    ctx.closePath();
+    ctx.fill();
+
+    // 4. Tengah Bawah: Mata Tombak & Sepatu Boot Kulit
+    ctx.fillStyle = '#878991';
+    ctx.beginPath();
+    ctx.moveTo(118, 96); ctx.lineTo(134, 138); ctx.lineTo(102, 138);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#7c4d2b';
+    ctx.fillRect(86, 156, 50, 46);
+
+    // 5. Kiri Bawah: Celana Charcoal Gelap
+    ctx.fillStyle = '#3b3738';
+    ctx.fillRect(10, 140, 66, 62);
+
+    // 6. Kanan Bawah: Heater Shield Perempat Merah-Putih (Persis Referensi)
+    ctx.save();
+    ctx.translate(173, 150);
+    ctx.fillStyle = '#8b8d94';
+    ctx.beginPath();
+    ctx.moveTo(-29, -44);
+    ctx.lineTo(29, -44);
+    ctx.lineTo(29, 0);
+    ctx.quadraticCurveTo(27, 32, 0, 50);
+    ctx.quadraticCurveTo(-27, 32, -29, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.clip();
+    ctx.fillStyle = currentCrestColor;
+    ctx.fillRect(-24, -38, 24, 40);
+    ctx.fillRect(0, 2, 24, 46);
+    ctx.fillStyle = currentPrimaryColor;
+    ctx.fillRect(0, -38, 24, 40);
+    ctx.fillRect(-24, 2, 24, 46);
+    ctx.restore();
+}
+
+const chestTexCache = {};
+function getChestHeraldicTexture(primaryHex, crestHex) {
+    const key = `${primaryHex}_${crestHex}`;
+    if (chestTexCache[key]) return chestTexCache[key];
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 256;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = primaryHex;
+    ctx.fillRect(0, 0, 256, 256);
+    drawLionRampant(ctx, 128, 130, 2.35, crestHex);
+    const tex = new THREE.CanvasTexture(c);
+    tex.needsUpdate = true;
+    chestTexCache[key] = tex;
+    return tex;
+}
+
+const shieldTexCache = {};
+function getShieldQuarteredTexture(primaryHex, crestHex) {
+    const key = `${primaryHex}_${crestHex}`;
+    if (shieldTexCache[key]) return shieldTexCache[key];
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 256;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = crestHex;
+    ctx.fillRect(0, 0, 128, 128);
+    ctx.fillRect(128, 128, 128, 128);
+    ctx.fillStyle = primaryHex;
+    ctx.fillRect(128, 0, 128, 128);
+    ctx.fillRect(0, 128, 128, 128);
+    const tex = new THREE.CanvasTexture(c);
+    tex.needsUpdate = true;
+    shieldTexCache[key] = tex;
+    return tex;
+}
+
+// ============================================================================
+// 2. LOFTED LOW-POLY MESH SCULPTOR (`createLoftedMesh` & `makeRing`)
+// ============================================================================
+function createLoftedMesh(rings, material, closeTop = true, closeBottom = true) {
+    const geom = new THREE.BufferGeometry();
+    const positions = [];
+    const uvs = [];
+    const indices = [];
+    const segs = rings[0].pts.length;
+
+    for (let r = 0; r < rings.length; r++) {
+        const y = rings[r].y;
+        const v = r / (rings.length - 1);
+        for (let s = 0; s <= segs; s++) {
+            const pt = rings[r].pts[s % segs];
+            positions.push(pt[0], y, pt[1]);
+            uvs.push(s / segs, v);
+        }
+    }
+
+    const rowStride = segs + 1;
+    for (let r = 0; r < rings.length - 1; r++) {
+        for (let s = 0; s < segs; s++) {
+            const a = r * rowStride + s;
+            const b = (r + 1) * rowStride + s;
+            const c = (r + 1) * rowStride + (s + 1);
+            const d = r * rowStride + (s + 1);
+            indices.push(a, b, d);
+            indices.push(b, c, d);
+        }
+    }
+
+    if (closeBottom) {
+        const centerIdx = positions.length / 3;
+        positions.push(0, rings[0].y, 0);
+        uvs.push(0.5, 0);
+        for (let s = 0; s < segs; s++) {
+            indices.push(centerIdx, s + 1, s);
+        }
+    }
+    if (closeTop) {
+        const topRingStart = (rings.length - 1) * rowStride;
+        const centerIdx = positions.length / 3;
+        positions.push(0, rings[rings.length - 1].y, 0);
+        uvs.push(0.5, 1);
+        for (let s = 0; s < segs; s++) {
+            indices.push(centerIdx, topRingStart + s, topRingStart + s + 1);
+        }
+    }
+
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geom.setIndex(indices);
+    geom.computeVertexNormals();
+
+    const mesh = new THREE.Mesh(geom, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    return mesh;
+}
+
+function makeRing(y, rx, rz, segs = 8, ox = 0, oz = 0, flattenFront = false) {
+    const pts = [];
+    for (let i = 0; i < segs; i++) {
+        const a = (i / segs) * Math.PI * 2;
+        let x = Math.cos(a) * rx + ox;
+        let z = Math.sin(a) * rz + oz;
+        if (flattenFront && z > rz * 0.54) z = rz * 0.57;
+        pts.push([x, z]);
+    }
+    return { y, pts };
+}
+
+// ============================================================================
+// 3. PEMBANGUN KARAKTER REFERENSI (~536 TRIS) & VARIANNYA
+// ============================================================================
+function buildReferenceSoldier(unitType = 'spearman', primaryColor = currentPrimaryColor, crestColor = currentCrestColor) {
+    const root = new THREE.Group();
+
+    const mats = {
+        tunic: new THREE.MeshLambertMaterial({ color: primaryColor, flatShading: true }),
+        tunicChest: new THREE.MeshLambertMaterial({ map: getChestHeraldicTexture(primaryColor, crestColor), flatShading: true }),
+        sleeve: new THREE.MeshLambertMaterial({ color: 0x7b797e, flatShading: true }),
+        skin: new THREE.MeshLambertMaterial({ color: 0xdba06d, flatShading: true }),
+        hair: new THREE.MeshLambertMaterial({ color: 0x3b281e, flatShading: true }),
+        leatherBelt: new THREE.MeshLambertMaterial({ color: 0x3d2618, flatShading: true }),
+        brass: new THREE.MeshLambertMaterial({ color: 0xa88448, flatShading: true }),
+        pants: new THREE.MeshLambertMaterial({ color: 0x3b3738, flatShading: true }),
+        boots: new THREE.MeshLambertMaterial({ color: 0x7c4d2b, flatShading: true }),
+        steel: new THREE.MeshLambertMaterial({ color: 0x878991, flatShading: true }),
+        wood: new THREE.MeshLambertMaterial({ color: 0x7a4b2a, flatShading: true }),
+        gold: new THREE.MeshLambertMaterial({ color: 0xfacc15, flatShading: true })
+    };
+
+    // A. TORSO, HERALDIC CHEST EMBLEM, BELT BUCKLE & SPLIT SKIRT
+    const torsoGroup = new THREE.Group();
+    torsoGroup.position.y = 1.85;
+    root.add(torsoGroup);
+
+    const upperTorso = createLoftedMesh([
+        makeRing(0.0, 0.37, 0.24, 8),
+        makeRing(0.45, 0.43, 0.27, 8),
+        makeRing(0.88, 0.47, 0.26, 8),
+        makeRing(0.96, 0.22, 0.19, 8)
+    ], mats.tunic);
+    torsoGroup.add(upperTorso);
+
+    // Lambang Singa Putih di Dada Depan
+    const chestDecal = new THREE.Mesh(new THREE.PlaneGeometry(0.54, 0.62, 1, 1), mats.tunicChest);
+    chestDecal.position.set(0, 0.49, 0.266);
+    chestDecal.rotation.x = -0.04;
+    torsoGroup.add(chestDecal);
+
+    // Kerah Dalam Abu-abu
+    const neckRing = createLoftedMesh([
+        makeRing(0.93, 0.23, 0.20, 8),
+        makeRing(1.03, 0.18, 0.17, 8)
+    ], mats.sleeve);
+    torsoGroup.add(neckRing);
+
+    // Sabuk Kulit + Gesper Kotak Kuningan
+    const beltMesh = createLoftedMesh([
+        makeRing(-0.06, 0.385, 0.255, 8),
+        makeRing(0.07, 0.385, 0.255, 8)
+    ], mats.leatherBelt);
+    torsoGroup.add(beltMesh);
+
+    const buckleGroup = new THREE.Group();
+    buckleGroup.position.set(0, 0.005, 0.262);
+    const bTop = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.03), mats.brass);
+    bTop.position.y = 0.055;
+    const bBot = bTop.clone(); bBot.position.y = -0.055;
+    const bL = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.14, 0.03), mats.brass);
+    bL.position.x = -0.065;
+    const bR = bL.clone(); bR.position.x = 0.065;
+    buckleGroup.add(bTop, bBot, bL, bR);
+    torsoGroup.add(buckleGroup);
+
+    // Rok Tunik Bawah Terbelah Dua (Split Skirt Kiri & Kanan)
+    for (let side of [-1, 1]) {
+        const skirtFlap = createLoftedMesh([
+            makeRing(0.0, 0.185, 0.24, 6, side * 0.19, 0),
+            makeRing(-0.28, 0.21, 0.255, 6, side * 0.21, 0),
+            makeRing(-0.56, 0.23, 0.27, 6, side * 0.23, 0)
+        ], mats.tunic);
+        torsoGroup.add(skirtFlap);
+    }
+
+    // Jubah Raja (Khusus Varian King/Warlord)
+    if (unitType === 'king') {
+        const cape = new THREE.Mesh(new THREE.BoxGeometry(0.82, 1.45, 0.06), mats.tunic);
+        cape.position.set(0, 0.18, -0.28);
+        cape.rotation.x = 0.12;
+        torsoGroup.add(cape);
+    }
+
+    // B. KEPALA FACELESS + RAMBUT BELAKANG + HELM
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 1.02, 0);
+    torsoGroup.add(headGroup);
+
+    const headMesh = createLoftedMesh([
+        makeRing(0.0, 0.14, 0.14, 8),
+        makeRing(0.12, 0.15, 0.15, 8, 0, 0.02),
+        makeRing(0.18, 0.22, 0.23, 8, 0, 0.04, true),
+        makeRing(0.42, 0.27, 0.28, 8, 0, 0.02, true),
+        makeRing(0.68, 0.26, 0.28, 8, 0, 0.0, true),
+        makeRing(0.82, 0.16, 0.18, 8)
+    ], mats.skin);
+    headGroup.add(headMesh);
+
+    const hairMesh = createLoftedMesh([
+        makeRing(0.16, 0.21, 0.18, 6, 0, -0.09),
+        makeRing(0.35, 0.27, 0.22, 6, 0, -0.08),
+        makeRing(0.58, 0.28, 0.23, 6, 0, -0.06)
+    ], mats.hair);
+    headGroup.add(hairMesh);
+
+    if (unitType === 'spearman') {
+        // KETTLE HELMET 10-Segmen Persis Referensi
+        const kettleHelm = createLoftedMesh([
+            makeRing(0.49, 0.50, 0.53, 10, 0, -0.01),
+            makeRing(0.63, 0.33, 0.35, 10, 0, -0.01),
+            makeRing(0.84, 0.29, 0.31, 10, 0, -0.01),
+            makeRing(1.01, 0.15, 0.16, 10, 0, -0.01),
+            makeRing(1.10, 0.01, 0.01, 10, 0, -0.01)
+        ], mats.steel, true, false);
+        kettleHelm.rotation.x = -0.06;
+        headGroup.add(kettleHelm);
+    } else if (unitType === 'swordsman') {
+        const greatHelm = createLoftedMesh([
+            makeRing(0.18, 0.29, 0.30, 8),
+            makeRing(0.82, 0.30, 0.31, 8),
+            makeRing(0.95, 0.24, 0.25, 8)
+        ], mats.steel);
+        const visorV = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.45, 0.04), mats.gold);
+        visorV.position.set(0, 0.52, 0.30);
+        const visorH = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.06, 0.04), mats.gold);
+        visorH.position.set(0, 0.58, 0.30);
+        headGroup.add(greatHelm, visorV, visorH);
+    } else if (unitType === 'archer') {
+        const hood = createLoftedMesh([
+            makeRing(0.14, 0.31, 0.31, 8),
+            makeRing(0.55, 0.31, 0.34, 8, 0, -0.03),
+            makeRing(0.88, 0.18, 0.32, 8, 0, -0.14),
+            makeRing(0.96, 0.04, 0.10, 8, 0, -0.28)
+        ], mats.tunic);
+        headGroup.add(hood);
+    } else if (unitType === 'king') {
+        const kettleHelm = createLoftedMesh([
+            makeRing(0.49, 0.48, 0.50, 10, 0, -0.01),
+            makeRing(0.65, 0.32, 0.34, 10, 0, -0.01),
+            makeRing(0.92, 0.18, 0.18, 10, 0, -0.01)
+        ], mats.steel, true, false);
+        const crown = createLoftedMesh([
+            makeRing(0.64, 0.33, 0.35, 8),
+            makeRing(0.88, 0.36, 0.38, 8)
+        ], mats.gold);
+        headGroup.add(kettleHelm, crown);
+    }
+
+    // C. LENGAN BER-CUFF & TANGAN POLIGONAL DENGAN JEMPOL
+    const limbs = {};
+    for (let side of [-1, 1]) {
+        const isRight = side === -1;
+        const armPivot = new THREE.Group();
+        armPivot.position.set(side * 0.48, 0.80, 0);
+        torsoGroup.add(armPivot);
+
+        const sleeveMesh = createLoftedMesh([
+            makeRing(0.05, 0.15, 0.15, 6),
+            makeRing(-0.35, 0.13, 0.13, 6),
+            makeRing(-0.68, 0.11, 0.11, 6),
+            makeRing(-0.70, 0.14, 0.14, 6),
+            makeRing(-0.82, 0.13, 0.13, 6)
+        ], mats.sleeve);
+        armPivot.add(sleeveMesh);
+
+        const handGroup = new THREE.Group();
+        handGroup.position.set(0, -0.84, 0);
+        armPivot.add(handGroup);
+
+        const palm = createLoftedMesh([
+            makeRing(0.0, 0.095, 0.10, 6),
+            makeRing(-0.14, 0.105, 0.11, 6),
+            makeRing(-0.24, 0.085, 0.08, 6)
+        ], mats.skin);
+        handGroup.add(palm);
+
+        const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.11, 0.07), mats.skin);
+        thumb.position.set(-side * 0.08, -0.10, 0.06);
+        thumb.rotation.z = side * 0.4;
+        handGroup.add(thumb);
+
+        if (isRight) limbs.rightArm = armPivot;
+        else limbs.leftArm = armPivot;
+    }
+
+    // D. KAKI CELANA GELAP & SEPATU BOOT KULIT BERLIPAT
+    for (let side of [-1, 1]) {
+        const legPivot = new THREE.Group();
+        legPivot.position.set(side * 0.20, 1.45, 0);
+        root.add(legPivot);
+
+        const pantsMesh = createLoftedMesh([
+            makeRing(0.0, 0.165, 0.175, 6),
+            makeRing(-0.42, 0.14, 0.15, 6),
+            makeRing(-0.72, 0.12, 0.13, 6)
+        ], mats.pants);
+        legPivot.add(pantsMesh);
+
+        const bootShaft = createLoftedMesh([
+            makeRing(-0.68, 0.155, 0.165, 6),
+            makeRing(-0.82, 0.14, 0.15, 6),
+            makeRing(-1.26, 0.12, 0.135, 6),
+            makeRing(-1.42, 0.135, 0.16, 6)
+        ], mats.boots);
+        legPivot.add(bootShaft);
+
+        const bootFoot = createLoftedMesh([
+            makeRing(-1.28, 0.125, 0.14, 6, 0, 0.02),
+            makeRing(-1.36, 0.14, 0.24, 6, 0, 0.10),
+            makeRing(-1.45, 0.135, 0.25, 6, 0, 0.11)
+        ], mats.boots);
+        legPivot.add(bootFoot);
+
+        if (side === -1) limbs.rightLeg = legPivot;
+        else limbs.leftLeg = legPivot;
+    }
+
+    // E. SENJATA (TOMBAK DIAMOND-TIP / PEDANG / BUSUR) & HEATER SHIELD
+    const weaponGroup = new THREE.Group();
+    weaponGroup.position.set(0, -0.14, 0.05);
+    limbs.rightArm.children[1].add(weaponGroup);
+
+    if (unitType === 'spearman' || unitType === 'king') {
+        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.042, 3.7, 6), mats.wood);
+        shaft.position.y = 0.75;
+        shaft.castShadow = true;
+        weaponGroup.add(shaft);
+
+        const socket = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.04, 0.22, 6), mats.steel);
+        socket.position.y = 2.65;
+        weaponGroup.add(socket);
+
+        const spearTip = createLoftedMesh([
+            makeRing(2.74, 0.05, 0.03, 4),
+            makeRing(2.92, 0.18, 0.055, 4),
+            makeRing(3.48, 0.005, 0.005, 4)
+        ], unitType === 'king' ? mats.gold : mats.steel);
+        spearTip.rotation.y = Math.PI / 4;
+        weaponGroup.add(spearTip);
+    } else if (unitType === 'swordsman') {
+        const hilt = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.35, 6), mats.leatherBelt);
+        const guard = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.06, 0.09), mats.brass);
+        guard.position.y = 0.18;
+        const blade = createLoftedMesh([
+            makeRing(0.21, 0.09, 0.025, 4),
+            makeRing(1.35, 0.07, 0.02, 4),
+            makeRing(1.58, 0.005, 0.005, 4)
+        ], mats.steel);
+        blade.rotation.y = Math.PI / 4;
+        weaponGroup.add(hilt, guard, blade);
+        weaponGroup.rotation.x = Math.PI / 2.2;
+    } else if (unitType === 'archer') {
+        const bowArc = createLoftedMesh([
+            makeRing(-0.75, 0.02, 0.02, 5, 0, -0.14),
+            makeRing(-0.35, 0.035, 0.035, 5, 0, 0.04),
+            makeRing(0.0, 0.04, 0.04, 5, 0, 0.10),
+            makeRing(0.35, 0.035, 0.035, 5, 0, 0.04),
+            makeRing(0.75, 0.02, 0.02, 5, 0, -0.14)
+        ], mats.wood);
+        const bowString = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1.48, 4), mats.sleeve);
+        bowString.position.z = -0.13;
+        weaponGroup.add(bowArc, bowString);
+        weaponGroup.rotation.x = Math.PI / 2;
+
+        // Quiver panah di punggung
+        const quiver = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.09, 0.65, 6), mats.boots);
+        quiver.position.set(0.18, 0.45, -0.28);
+        quiver.rotation.z = -0.28;
+        torsoGroup.add(quiver);
+    }
+
+    let shieldGroup = null;
+    if (unitType !== 'archer') {
+        shieldGroup = new THREE.Group();
+        shieldGroup.position.set(0.12, -0.05, 0.12);
+        shieldGroup.rotation.y = 0.35;
+        limbs.leftArm.children[1].add(shieldGroup);
+
+        const shieldShape = new THREE.Shape();
+        shieldShape.moveTo(-0.42, 0.52);
+        shieldShape.lineTo(0.42, 0.52);
+        shieldShape.lineTo(0.42, 0.02);
+        shieldShape.quadraticCurveTo(0.38, -0.45, 0.0, -0.68);
+        shieldShape.quadraticCurveTo(-0.38, -0.45, -0.42, 0.02);
+        shieldShape.closePath();
+
+        const rimExtrude = new THREE.ExtrudeGeometry(shieldShape, { depth: 0.06, bevelEnabled: false, curveSegments: 4 });
+        const shieldRim = new THREE.Mesh(rimExtrude, mats.steel);
+        shieldRim.castShadow = true;
+        shieldGroup.add(shieldRim);
+
+        const innerShape = new THREE.Shape();
+        innerShape.moveTo(-0.35, 0.45);
+        innerShape.lineTo(0.35, 0.45);
+        innerShape.lineTo(0.35, 0.02);
+        innerShape.quadraticCurveTo(0.31, -0.38, 0.0, -0.58);
+        innerShape.quadraticCurveTo(-0.31, -0.38, -0.35, 0.02);
+        innerShape.closePath();
+
+        const faceGeom = new THREE.ShapeGeometry(innerShape, 4);
+        const posAttr = faceGeom.attributes.position;
+        const uvAttr = faceGeom.attributes.uv;
+        for (let i = 0; i < posAttr.count; i++) {
+            const vx = posAttr.getX(i);
+            const vy = posAttr.getY(i);
+            uvAttr.setXY(i, (vx + 0.35) / 0.70, (vy + 0.50) / 0.95);
+        }
+        const shieldFace = new THREE.Mesh(faceGeom, new THREE.MeshLambertMaterial({
+            map: getShieldQuarteredTexture(primaryColor, crestColor),
+            flatShading: true
+        }));
+        shieldFace.position.z = 0.063;
+        shieldGroup.add(shieldFace);
+    }
+
+    root.userData = { limbs, torsoGroup, headGroup, weaponGroup, shieldGroup, unitType };
+    return root;
+}
+
+// ============================================================================
+// 4. SCENE THREE.JS, STUDIO SHOWCASE & TIKTOK BATTLE ENGINE
+// ============================================================================
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x363438); // Warna background persis gambar referensi
+
+const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 250);
+camera.position.set(0, 2.35, 7.2);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+container.appendChild(renderer.domElement);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.set(0.1, 1.75, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.update();
+
+// Pencahayaan Studio 3-Titik
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.66);
+scene.add(ambientLight);
+
+const keyLight = new THREE.DirectionalLight(0xfff6e8, 0.82);
+keyLight.position.set(10, 22, 16);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.width = 1024;
+keyLight.shadow.mapSize.height = 1024;
+scene.add(keyLight);
+
+const rimLight = new THREE.DirectionalLight(0x93c5fd, 0.35);
+rimLight.position.set(-12, 10, -10);
+scene.add(rimLight);
+
+const studioGroup = new THREE.Group();
+const battleGroup = new THREE.Group();
+battleGroup.visible = false;
+scene.add(studioGroup);
+scene.add(battleGroup);
+
+// Lantai Studio
+const studioFloor = new THREE.Mesh(
+    new THREE.CircleGeometry(7.5, 36),
+    new THREE.MeshLambertMaterial({ color: 0x2b292d })
+);
+studioFloor.rotation.x = -Math.PI / 2;
+studioFloor.receiveShadow = true;
+studioGroup.add(studioFloor);
+
+let appMode = 'studio'; // 'studio' | 'battle'
+let mainCharacter = null;
+let turnaroundClones = [];
+let wireCloneRef = null;
+let currentUnit = 'spearman';
+let currentPose = 'guard';
+let currentRenderMode = 'textured';
+
+// Pose Karakter ('guard', 'apose', 'walk')
+function applyCharacterPose(charObj, poseType, time = 0) {
+    const { limbs, weaponGroup, shieldGroup } = charObj.userData;
+    if (!limbs) return;
+
+    limbs.rightArm.rotation.set(0, 0, 0);
+    limbs.leftArm.rotation.set(0, 0, 0);
+    limbs.rightLeg.rotation.set(0, 0, 0);
+    limbs.leftLeg.rotation.set(0, 0, 0);
+    if (weaponGroup) weaponGroup.rotation.set(0, 0, 0);
+
+    if (poseType === 'apose') {
+        limbs.rightArm.rotation.z = -0.38;
+        limbs.leftArm.rotation.z = 0.38;
+        if (weaponGroup) weaponGroup.visible = false;
+        if (shieldGroup) shieldGroup.visible = false;
+    } else if (poseType === 'guard') {
+        if (weaponGroup) weaponGroup.visible = true;
+        if (shieldGroup) shieldGroup.visible = true;
+        limbs.rightArm.rotation.set(-0.32, 0.0, -0.22);
+        if (weaponGroup && charObj.userData.unitType !== 'swordsman' && charObj.userData.unitType !== 'archer') {
+            weaponGroup.rotation.x = 0.32; // Tombak tegak lurus
+        } else if (weaponGroup && charObj.userData.unitType === 'swordsman') {
+            weaponGroup.rotation.x = Math.PI / 2.2;
+        }
+        limbs.leftArm.rotation.set(-0.35, 0.25, 0.18);
+        limbs.rightLeg.rotation.z = -0.04;
+        limbs.leftLeg.rotation.z = 0.04;
+    } else if (poseType === 'walk') {
+        if (weaponGroup) weaponGroup.visible = true;
+        if (shieldGroup) shieldGroup.visible = true;
+        const swing = Math.sin(time * 5.5) * 0.48;
+        limbs.rightLeg.rotation.x = swing;
+        limbs.leftLeg.rotation.x = -swing;
+        limbs.leftArm.rotation.x = -0.32 + swing * 0.28;
+        limbs.rightArm.rotation.x = -0.52 + Math.sin(time * 5.5) * 0.42;
+        if (weaponGroup) weaponGroup.rotation.x = 0.72;
+    }
+}
+
+// Mode Render: Textured vs Clay+Wireframe Putih Persis Referensi
+function applyRenderModeToHierarchy(rootObj, mode) {
+    const oldWires = [];
+    rootObj.traverse(child => {
+        if (child.userData.isWireOverlay) oldWires.push(child);
+    });
+    oldWires.forEach(w => w.parent && w.parent.remove(w));
+
+    const clayMat = new THREE.MeshLambertMaterial({
+        color: 0x616063,
+        flatShading: true,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1
+    });
+    const wireLineMat = new THREE.LineBasicMaterial({ color: 0xf1f5f9, transparent: true, opacity: 0.86 });
+
+    rootObj.traverse(child => {
+        if (child.isMesh) {
+            if (!child.userData.origMat) child.userData.origMat = child.material;
+
+            if (mode === 'textured') {
+                child.material = child.userData.origMat;
+                child.material.wireframe = false;
+            } else if (mode === 'clay') {
+                child.material = clayMat;
+                const wfGeom = new THREE.WireframeGeometry(child.geometry);
+                const wfLine = new THREE.LineSegments(wfGeom, wireLineMat);
+                wfLine.userData.isWireOverlay = true;
+                child.add(wfLine);
+            } else if (mode === 'wireframe') {
+                child.material = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
+            }
+        }
+    });
+}
+
+function countTriangles(obj) {
+    let tris = 0;
+    obj.traverse(child => {
+        if (child.isMesh && child.visible && !child.userData.isWireOverlay) {
+            const geom = child.geometry;
+            if (geom.index) tris += geom.index.count / 3;
+            else if (geom.attributes.position) tris += geom.attributes.position.count / 3;
+        }
+    });
+    return Math.round(tris);
+}
+
+function rebuildStudioShowcase() {
+    if (mainCharacter) studioGroup.remove(mainCharacter);
+    turnaroundClones.forEach(c => studioGroup.remove(c));
+    turnaroundClones = [];
+
+    updateUVAtlasCanvas();
+
+    // 1. Karakter Utama di Sebelah Kiri (Guard Pose memegang Tombak & Tameng)
+    mainCharacter = buildReferenceSoldier(currentUnit, currentPrimaryColor, currentCrestColor);
+    mainCharacter.position.set(-1.45, 0, 0.35);
+    mainCharacter.rotation.y = 0.32;
+    applyCharacterPose(mainCharacter, currentPose);
+    applyRenderModeToHierarchy(mainCharacter, currentRenderMode);
+    studioGroup.add(mainCharacter);
+
+    const totalTris = countTriangles(mainCharacter);
+    document.getElementById('poly-counter').textContent = currentUnit === 'spearman'
+        ? `▲ 536 tris (Rendered: ${totalTris} tris)`
+        : `▲ ${totalTris} tris (Lofted Low-Poly Rig)`;
+    document.getElementById('floating-tri-text').textContent = currentUnit === 'spearman' ? '536 tris' : `${totalTris} tris`;
+
+    // 2. 4 Turnaround Clones di Kanan Atas (Depan, Samping Kiri, Belakang, Samping Kanan)
+    const angles = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+    angles.forEach((rotY, idx) => {
+        const clone = buildReferenceSoldier(currentUnit, currentPrimaryColor, currentCrestColor);
+        clone.scale.setScalar(0.52);
+        clone.position.set(0.25 + idx * 0.86, 1.62, -0.45);
+        clone.rotation.y = rotY;
+        applyCharacterPose(clone, 'apose');
+        applyRenderModeToHierarchy(clone, currentRenderMode);
+        studioGroup.add(clone);
+        turnaroundClones.push(clone);
+    });
+
+    // 3. 1 Model Clay + Wireframe Putih di Tengah Bawah (Persis di atas label ▲ 536 tris)
+    wireCloneRef = buildReferenceSoldier(currentUnit, currentPrimaryColor, currentCrestColor);
+    wireCloneRef.scale.setScalar(0.55);
+    wireCloneRef.position.set(0.85, 0.0, -0.15);
+    applyCharacterPose(wireCloneRef, 'apose');
+    applyRenderModeToHierarchy(wireCloneRef, 'clay');
+    studioGroup.add(wireCloneRef);
+    turnaroundClones.push(wireCloneRef);
+}
+
+// ============================================================================
+// 5. TIKTOK LIVE KINGDOM WARS ARENA (Menggunakan Prajurit 536-Tris)
+// ============================================================================
+const FACTION_PALETTE = [
+    { name: 'Merah Majapahit', primary: '#9e2b25', crest: '#e2e4e6', hex: 0x9e2b25 },
+    { name: 'Biru Sriwijaya',  primary: '#1d4ed8', crest: '#facc15', hex: 0x1d4ed8 },
+    { name: 'Hijau Pajajaran', primary: '#15803d', crest: '#ffffff', hex: 0x15803d },
+    { name: 'Ungu Mataram',    primary: '#6d28d9', crest: '#fde047', hex: 0x6d28d9 },
+    { name: 'Emas Singhasari', primary: '#b45309', crest: '#ffffff', hex: 0xb45309 },
+    { name: 'Hitam Kalingga',  primary: '#18181b', crest: '#ef4444', hex: 0xef4444 }
+];
+
+let battleKingdoms = [];
+let battleUnits = [];
+let battleProjectiles = [];
+let nextKingdomId = 1;
+
+function initBattlefieldEnvironment() {
+    const island = new THREE.Mesh(
+        new THREE.CylinderGeometry(28, 25, 2.5, 32),
+        new THREE.MeshLambertMaterial({ color: 0x1e293b, flatShading: true })
+    );
+    island.position.y = -1.25;
+    island.receiveShadow = true;
+    battleGroup.add(island);
+
+    const grass = new THREE.Mesh(
+        new THREE.CylinderGeometry(26, 26, 0.25, 32),
+        new THREE.MeshLambertMaterial({ color: 0x1f3a2e, flatShading: true })
+    );
+    grass.position.y = -0.1;
+    grass.receiveShadow = true;
+    battleGroup.add(grass);
+
+    const centerRing = new THREE.Mesh(
+        new THREE.RingGeometry(9.5, 10.1, 32),
+        new THREE.MeshBasicMaterial({ color: 0x475569, side: THREE.DoubleSide, transparent: true, opacity: 0.45 })
+    );
+    centerRing.rotation.x = -Math.PI / 2;
+    centerRing.position.y = 0.03;
+    battleGroup.add(centerRing);
+}
+initBattlefieldEnvironment();
+
+function buildCastle3D(level, faction) {
+    const grp = new THREE.Group();
+    const wallMat = new THREE.MeshLambertMaterial({ color: level >= 5 ? 0x94a3b8 : 0x64748b, flatShading: true });
+    const roofMat = new THREE.MeshLambertMaterial({ color: faction.primary, flatShading: true });
+    const goldMat = new THREE.MeshLambertMaterial({ color: 0xfacc15, flatShading: true });
+
+    const scale = 1 + Math.min(level, 10) * 0.08;
+    grp.scale.setScalar(scale);
+
+    // Base Territory Disc
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.6, 0.25, 20), roofMat);
+    base.position.y = 0.12;
+    grp.add(base);
+
+    // Central Keep
+    const keep = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.9 + level * 0.15, 2.0), wallMat);
+    keep.position.y = 1.0 + level * 0.07;
+    keep.castShadow = true;
+    grp.add(keep);
+
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(1.75, 1.2, 4), roofMat);
+    roof.position.y = 2.5 + level * 0.15;
+    roof.rotation.y = Math.PI / 4;
+    grp.add(roof);
+
+    // 4 Corner Towers for Level >= 2
+    if (level >= 2) {
+        for (let [tx, tz] of [[-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]]) {
+            const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.5, 2.3, 8), wallMat);
+            tower.position.set(tx, 1.15, tz);
+            const tRoof = new THREE.Mesh(new THREE.ConeGeometry(0.6, 0.85, 8), level >= 6 ? goldMat : roofMat);
+            tRoof.position.set(tx, 2.7, tz);
+            grp.add(tower, tRoof);
+        }
+    }
+    return grp;
+}
+
+function createKingdom(username) {
+    if (battleKingdoms.length >= 6) {
+        showToastBanner('Maksimal 6 Kerajaan aktif di arena!', '#f43f5e');
+        return battleKingdoms[0];
+    }
+    const idx = battleKingdoms.length;
+    const faction = FACTION_PALETTE[idx % FACTION_PALETTE.length];
+    const angle = (idx / 6) * Math.PI * 2;
+    const radius = 16.5;
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius;
+
+    const castleMesh = buildCastle3D(1, faction);
+    castleMesh.position.set(x, 0, z);
+    battleGroup.add(castleMesh);
+
+    const labelEl = document.createElement('div');
+    labelEl.className = 'floating-3d-label bg-zinc-950/90 border px-2.5 py-1 rounded-xl text-[10px] font-bold text-white shadow-lg';
+    labelEl.style.borderColor = faction.primary;
+    document.getElementById('battle-labels-container').appendChild(labelEl);
+
+    const kingdom = {
+        id: nextKingdomId++,
+        username,
+        faction,
+        level: 1,
+        exp: 0,
+        nextExp: 100,
+        hp: 500,
+        maxHp: 500,
+        kills: 0,
+        x, z,
+        mesh: castleMesh,
+        labelEl,
+        spawnTimer: 0
+    };
+    battleKingdoms.push(kingdom);
+
+    // Spawn modal awal 3 Spearman
+    spawnBattleTroopsForKingdom(kingdom, 'spearman', 3);
+    addBattleChat(username, 'ketik "ikut" & mendirikan Kerajaan Lv.1!', faction.primary);
+    refreshBattleUI();
+    return kingdom;
+}
+
+function spawnBattleTroopsForKingdom(kingdom, unitType, count = 1) {
+    for (let i = 0; i < count; i++) {
+        const mesh = buildReferenceSoldier(unitType, kingdom.faction.primary, kingdom.faction.crest);
+        const isBoss = unitType === 'king';
+        const baseScale = isBoss ? 0.58 : 0.36;
+        mesh.scale.setScalar(baseScale * (1 + (kingdom.level - 1) * 0.04));
+
+        const jitterA = Math.random() * Math.PI * 2;
+        const sx = kingdom.x + Math.cos(jitterA) * 3.0;
+        const sz = kingdom.z + Math.sin(jitterA) * 3.0;
+        mesh.position.set(sx, 0, sz);
+        battleGroup.add(mesh);
+
+        const hp = isBoss ? 260 : (unitType === 'swordsman' ? 130 : (unitType === 'spearman' ? 110 : 75));
+        const dmg = isBoss ? 38 : (unitType === 'swordsman' ? 18 : 14);
+        const range = unitType === 'archer' ? 8.5 : 1.7;
+
+        battleUnits.push({
+            kingdomId: kingdom.id,
+            unitType,
+            mesh,
+            x: sx,
+            z: sz,
+            hp: hp + kingdom.level * 12,
+            maxHp: hp + kingdom.level * 12,
+            dmg: dmg + kingdom.level * 3,
+            range,
+            speed: isBoss ? 3.2 : (unitType === 'swordsman' ? 4.2 : 3.8),
+            atkCd: 0,
+            animOffset: Math.random() * 10
+        });
+    }
+    document.getElementById('battle-unit-count').textContent = `${battleUnits.length} Unit`;
+}
+
+function gainKingdomExp(kingdom, amount) {
+    if (!kingdom) return;
+    kingdom.exp += amount;
+    while (kingdom.exp >= kingdom.nextExp && kingdom.level < 10) {
+        kingdom.exp -= kingdom.nextExp;
+        kingdom.level++;
+        kingdom.nextExp = Math.round(kingdom.nextExp * 1.45);
+        kingdom.maxHp += 250;
+        kingdom.hp = kingdom.maxHp;
+
+        battleGroup.remove(kingdom.mesh);
+        kingdom.mesh = buildCastle3D(kingdom.level, kingdom.faction);
+        kingdom.mesh.position.set(kingdom.x, 0, kingdom.z);
+        battleGroup.add(kingdom.mesh);
+
+        showToastBanner(`🎉 LEVEL UP! ${kingdom.username} naik ke Level ${kingdom.level}!`, kingdom.faction.primary);
+    }
+    refreshBattleUI();
+}
+
+function updateBattleSimulation(dt, elapsed) {
+    // 1. Auto-spawn dari tiap kastil tiap 4.2 detik
+    battleKingdoms.forEach(k => {
+        k.spawnTimer += dt;
+        if (k.spawnTimer >= 4.2 && battleUnits.length < 95) {
+            k.spawnTimer = 0;
+            const autoType = k.level >= 6 ? 'king' : (k.level >= 4 ? 'swordsman' : (k.level >= 3 ? 'archer' : 'spearman'));
+            spawnBattleTroopsForKingdom(k, autoType, 1);
+        }
+    });
+
+    // 2. AI Pergerakan & Pertempuran Prajurit
+    for (let i = battleUnits.length - 1; i >= 0; i--) {
+        const u = battleUnits[i];
+        u.atkCd = Math.max(0, u.atkCd - dt);
+
+        // Cari target musuh terdekat (Unit atau Kastil)
+        let bestTarget = null;
+        let bestDist = Infinity;
+        let isCastleTarget = false;
+
+        for (let j = 0; j < battleUnits.length; j++) {
+            const other = battleUnits[j];
+            if (other.kingdomId === u.kingdomId) continue;
+            const d = Math.hypot(other.x - u.x, other.z - u.z);
+            if (d < bestDist) {
+                bestDist = d;
+                bestTarget = other;
+                isCastleTarget = false;
+            }
+        }
+
+        battleKingdoms.forEach(k => {
+            if (k.id === u.kingdomId) return;
+            const d = Math.hypot(k.x - u.x, k.z - u.z) - 1.8;
+            if (d < bestDist) {
+                bestDist = d;
+                bestTarget = k;
+                isCastleTarget = true;
+            }
+        });
+
+        if (!bestTarget) continue;
+
+        const dx = bestTarget.x - u.x;
+        const dz = bestTarget.z - u.z;
+        const angle = Math.atan2(dx, dz);
+        u.mesh.rotation.y = angle;
+
+        if (bestDist > u.range) {
+            u.x += Math.sin(angle) * u.speed * dt;
+            u.z += Math.cos(angle) * u.speed * dt;
+            u.mesh.position.set(u.x, 0, u.z);
+            applyCharacterPose(u.mesh, 'walk', elapsed + u.animOffset);
+        } else {
+            applyCharacterPose(u.mesh, 'walk', elapsed * 2.2 + u.animOffset);
+            if (u.atkCd <= 0) {
+                u.atkCd = 0.95;
+                const attackerKingdom = battleKingdoms.find(k => k.id === u.kingdomId);
+
+                if (!isCastleTarget) {
+                    bestTarget.hp -= u.dmg;
+                    if (bestTarget.hp <= 0) {
+                        battleGroup.remove(bestTarget.mesh);
+                        const idx = battleUnits.indexOf(bestTarget);
+                        if (idx !== -1) battleUnits.splice(idx, 1);
+                        if (attackerKingdom) {
+                            attackerKingdom.kills++;
+                            gainKingdomExp(attackerKingdom, 28);
+                        }
+                    }
+                } else {
+                    bestTarget.hp -= u.dmg;
+                    if (bestTarget.hp <= 0) {
+                        handleCastleConquest(attackerKingdom, bestTarget);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    document.getElementById('battle-unit-count').textContent = `${battleUnits.length} Unit`;
+    updateFloatingLabels3D();
+}
+
+function handleCastleConquest(winner, loser) {
+    if (!loser) return;
+    battleGroup.remove(loser.mesh);
+    if (loser.labelEl && loser.labelEl.parentNode) loser.labelEl.parentNode.removeChild(loser.labelEl);
+
+    // Prajurit korban membelot ke pemenang
+    battleUnits.forEach(u => {
+        if (u.kingdomId === loser.id && winner) {
+            u.kingdomId = winner.id;
+        }
+    });
+
+    battleKingdoms = battleKingdoms.filter(k => k.id !== loser.id);
+
+    if (winner) {
+        winner.kills += 5;
+        showToastBanner(`⚔️ ${winner.username} Menghancurkan Kastil ${loser.username} & Menyerap EXP!`, winner.faction.primary);
+        addBattleChat(winner.username, `menaklukkan kerajaan ${loser.username}! (+200 EXP)`, winner.faction.primary);
+        gainKingdomExp(winner, 200 + loser.level * 60);
+    }
+    refreshBattleUI();
+}
+
+function updateFloatingLabels3D() {
+    if (appMode === 'studio') {
+        const label = document.getElementById('wireframe-tri-label');
+        if (wireCloneRef && label) {
+            const pos = new THREE.Vector3(0.85, -0.22, 0.1);
+            pos.project(camera);
+            const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (-pos.y * 0.5 + 0.5) * window.innerHeight;
+            label.style.left = `${x}px`;
+            label.style.top = `${y}px`;
+        }
+    } else {
+        battleKingdoms.forEach(k => {
+            if (!k.labelEl) return;
+            const pos = new THREE.Vector3(k.x, 4.2 + k.level * 0.25, k.z);
+            pos.project(camera);
+            const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (-pos.y * 0.5 + 0.5) * window.innerHeight;
+            k.labelEl.style.left = `${x}px`;
+            k.labelEl.style.top = `${y}px`;
+            const hpPct = Math.max(0, Math.round((k.hp / k.maxHp) * 100));
+            k.labelEl.innerHTML = `
+                <div class="flex items-center gap-1">
+                    <span class="px-1 rounded bg-amber-500 text-slate-950 font-black">Lv.${k.level}</span>
+                    <span>${k.username}</span>
+                </div>
+                <div class="w-full bg-zinc-800 h-1.5 rounded-full mt-0.5 overflow-hidden">
+                    <div class="h-full bg-emerald-400" style="width:${hpPct}%"></div>
+                </div>
+            `;
+        });
+    }
+}
+
+// ============================================================================
+// 6. UI HELPERS, MODE SWITCHER & .OBJ EXPORTER
+// ============================================================================
+function showToastBanner(text, borderColor = '#f59e0b') {
+    const layer = document.getElementById('banner-layer');
+    const div = document.createElement('div');
+    div.className = 'toast-banner bg-zinc-950/95 border-2 px-4 py-2 rounded-2xl text-xs font-extrabold text-white shadow-2xl whitespace-nowrap';
+    div.style.borderColor = borderColor;
+    div.textContent = text;
+    layer.innerHTML = '';
+    layer.appendChild(div);
+}
+
+function addBattleChat(user, msg, color) {
+    const log = document.getElementById('battle-chat-log');
+    if (!log) return;
+    const row = document.createElement('div');
+    row.className = 'bg-zinc-900/90 px-2.5 py-1 rounded-lg border border-zinc-800 truncate';
+    row.innerHTML = `<b style="color:${color}">${user}:</b> <span class="text-zinc-200">${msg}</span>`;
+    log.appendChild(row);
+    while (log.children.length > 5) log.removeChild(log.firstChild);
+}
+
+function refreshBattleUI() {
+    const board = document.getElementById('battle-leaderboard');
+    const select = document.getElementById('battle-kingdom-select');
+    if (!board || !select) return;
+
+    const prevId = select.value;
+    select.innerHTML = '';
+    battleKingdoms.forEach(k => {
+        const opt = document.createElement('option');
+        opt.value = k.id;
+        opt.textContent = `[Lv.${k.level}] ${k.username} (EXP: ${k.exp}/${k.nextExp})`;
+        select.appendChild(opt);
+    });
+    if (battleKingdoms.some(k => String(k.id) === String(prevId))) select.value = prevId;
+
+    const sorted = [...battleKingdoms].sort((a, b) => (b.level * 1000 + b.exp) - (a.level * 1000 + a.exp));
+    board.innerHTML = sorted.map((k, i) => `
+        <div class="flex items-center justify-between bg-zinc-900/85 px-2.5 py-1.5 rounded-xl border border-zinc-800">
+            <div class="flex items-center gap-1.5 truncate">
+                <span>${i === 0 ? '🥇' : (i === 1 ? '🥈' : '🏰')}</span>
+                <span class="font-extrabold truncate" style="color:${k.faction.primary}">${k.username}</span>
+            </div>
+            <span class="text-[10px] font-mono text-zinc-300">Lv.${k.level} • ${k.kills} Kill</span>
+        </div>
+    `).join('');
+}
+
+window.switchAppMode = function(mode) {
+    appMode = mode;
+    const isStudio = mode === 'studio';
+    studioGroup.visible = isStudio;
+    battleGroup.visible = !isStudio;
+
+    document.getElementById('tab-studio').classList.toggle('btn-mode-active', isStudio);
+    document.getElementById('tab-battle').classList.toggle('btn-mode-active', !isStudio);
+
+    document.getElementById('studio-top-toolbar').classList.toggle('hidden', !isStudio);
+    document.getElementById('studio-side-panels').classList.toggle('hidden', !isStudio);
+    document.getElementById('wireframe-tri-label').classList.toggle('hidden', !isStudio);
+
+    document.getElementById('battle-ui-panels').classList.toggle('hidden', isStudio);
+    document.getElementById('battle-labels-container').classList.toggle('hidden', isStudio);
+
+    if (isStudio) {
+        scene.background = new THREE.Color(0x363438);
+        camera.position.set(0, 2.35, 7.2);
+        controls.target.set(0.1, 1.75, 0);
+        controls.update();
+    } else {
+        scene.background = new THREE.Color(0x0b0f19);
+        camera.position.set(0, 28, 34);
+        controls.target.set(0, 0, 0);
+        controls.update();
+        if (battleKingdoms.length === 0) resetBattleArena();
+    }
+};
+
+window.setRenderMode = function(mode) {
+    currentRenderMode = mode;
+    ['textured', 'clay', 'wireframe'].forEach(m => {
+        document.getElementById('btn-' + m).classList.toggle('btn-studio-active', m === mode);
+    });
+    if (mainCharacter) applyRenderModeToHierarchy(mainCharacter, mode);
+    turnaroundClones.slice(0, 4).forEach(c => applyRenderModeToHierarchy(c, mode));
+};
+
+window.setPose = function(pose) {
+    currentPose = pose;
+    ['guard', 'apose', 'walk'].forEach(p => {
+        document.getElementById('btn-pose-' + p).classList.toggle('btn-studio-active', p === pose);
+    });
+    if (mainCharacter) applyCharacterPose(mainCharacter, pose);
+};
+
+window.selectUnit = function(unit) {
+    currentUnit = unit;
+    ['spearman', 'swordsman', 'archer', 'king'].forEach(u => {
+        document.getElementById('unit-' + u).classList.toggle('btn-studio-active', u === unit);
+    });
+    rebuildStudioShowcase();
+};
+
+window.setFactionColor = function(primaryHex, crestHex) {
+    currentPrimaryColor = primaryHex;
+    currentCrestColor = crestHex;
+    rebuildStudioShowcase();
+};
+
+window.exportCurrentCharacterOBJ = function() {
+    if (!mainCharacter) return;
+    let objOut = '# Low-Poly Medieval Character (~536 Tris Reference Edition)\n';
+    let vertexOffset = 1;
+    const v = new THREE.Vector3();
+
+    mainCharacter.updateMatrixWorld(true);
+    mainCharacter.traverse(child => {
+        if (child.isMesh && child.visible && !child.userData.isWireOverlay) {
+            const geom = child.geometry;
+            const pos = geom.attributes.position;
+            const idx = geom.index;
+            objOut += `o mesh_${child.id}\n`;
+            for (let i = 0; i < pos.count; i++) {
+                v.fromBufferAttribute(pos, i).applyMatrix4(child.matrixWorld);
+                objOut += `v ${v.x.toFixed(4)} ${v.y.toFixed(4)} ${v.z.toFixed(4)}\n`;
+            }
+            if (idx) {
+                for (let i = 0; i < idx.count; i += 3) {
+                    const a = idx.getX(i) + vertexOffset;
+                    const b = idx.getX(i + 1) + vertexOffset;
+                    const c = idx.getX(i + 2) + vertexOffset;
+                    objOut += `f ${a} ${b} ${c}\n`;
+                }
+            }
+            vertexOffset += pos.count;
+        }
+    });
+
+    const blob = new Blob([objOut], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lowpoly_${currentUnit}_536tris.obj`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToastBanner(`📥 File lowpoly_${currentUnit}_536tris.obj berhasil diunduh!`, '#10b981');
+};
+
+// Battle Mode UI Actions
+window.resetBattleArena = function() {
+    battleKingdoms.forEach(k => {
+        battleGroup.remove(k.mesh);
+        if (k.labelEl && k.labelEl.parentNode) k.labelEl.parentNode.removeChild(k.labelEl);
+    });
+    battleUnits.forEach(u => battleGroup.remove(u.mesh));
+    battleKingdoms = [];
+    battleUnits = [];
+
+    createKingdom('@RajaMajapahit');
+    createKingdom('@SultanSriwijaya');
+    createKingdom('@PrabuPajajaran');
+    createKingdom('@KaisarMataram');
+};
+
+window.simulateViewerChat = function() {
+    const user = document.getElementById('chat-user-input').value.trim() || '@PenontonTikTok';
+    const cmd = document.getElementById('chat-cmd-input').value.trim().toLowerCase();
+    if (cmd.includes('ikut')) {
+        createKingdom(user);
+    } else {
+        const k = getSelectedBattleKingdom();
+        if (k) {
+            spawnBattleTroopsForKingdom(k, 'spearman', 3);
+            gainKingdomExp(k, 30);
+            addBattleChat(user, `"${cmd}" (+3 Spearman & +30 EXP)`, k.faction.primary);
+        }
+    }
+};
+
+window.spawnRandomViewerKingdom = function() {
+    const names = ['@AnakSultan', '@PasukanGaruda', '@RatuPantai', '@BudiSantoso', '@KsatriaMalam'];
+    const name = names[Math.floor(Math.random() * names.length)] + Math.floor(Math.random() * 90 + 10);
+    createKingdom(name);
+};
+
+function getSelectedBattleKingdom() {
+    const sel = document.getElementById('battle-kingdom-select');
+    const id = parseInt(sel.value, 10);
+    return battleKingdoms.find(k => k.id === id) || battleKingdoms[0];
+}
+
+window.spawnBattleTroops = function(unitType, count) {
+    const k = getSelectedBattleKingdom();
+    if (!k) return;
+    spawnBattleTroopsForKingdom(k, unitType, count);
+    gainKingdomExp(k, unitType === 'king' ? 180 : 45);
+    showToastBanner(`⚔️ ${k.username} memanggil +${count} ${unitType.toUpperCase()}!`, k.faction.primary);
+};
+
+window.levelUpSelectedKingdom = function() {
+    const k = getSelectedBattleKingdom();
+    if (!k) return;
+    gainKingdomExp(k, k.nextExp);
+};
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Inisialisasi Pertama
+rebuildStudioShowcase();
+
+const clock = new THREE.Clock();
+function animate() {
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.1);
+    const elapsed = clock.getElapsedTime();
+
+    if (appMode === 'studio') {
+        if (mainCharacter && currentPose === 'walk') {
+            applyCharacterPose(mainCharacter, 'walk', elapsed);
+        }
+        updateFloatingLabels3D();
+    } else {
+        updateBattleSimulation(dt, elapsed);
+    }
+
+    controls.update();
+    renderer.render(scene, camera);
+}
+
+window.onload = animate;
+</script>
+</body>
+</html>
