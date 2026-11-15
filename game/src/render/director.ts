@@ -59,7 +59,7 @@ export class Director {
   private idle(sim: Sim, now: number) {
     if (sim.phase === "LOBBY" || sim.phase === "RESULT" || now - this.lastOverview > 40 || sim.alive.length === 0) {
       this.lastOverview = now;
-      this.propose({ x: 0, z: 0, dist: 150, priority: 5, label: "overview", seconds: sim.phase === "WAR" || sim.phase === "FINAL" ? 6 : 8 }, now);
+      this.propose({ x: 0, z: 0, dist: 420, priority: 5, label: "overview", seconds: sim.phase === "WAR" || sim.phase === "FINAL" ? 6 : 8 }, now);
       return;
     }
     if (sim.dragon && Math.random() < 0.35) {
@@ -99,6 +99,11 @@ export class Director {
     this.camera.position.lerp(this.desired, k);
     this.look.lerp(this.target, 1 - Math.exp(-dt * 3));
     this.camera.lookAt(this.look);
+  }
+
+  /** Point the camera is looking at (the shadow box follows it). */
+  get focus(): THREE.Vector3 {
+    return this.look;
   }
 
   get current() {

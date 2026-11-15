@@ -18,24 +18,24 @@ export function createScene(container: HTMLElement): SceneHandles {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x163d4d);
-  scene.fog = new THREE.Fog(0x163d4d, 160, 340);
+  scene.fog = new THREE.Fog(0x163d4d, 420, 950);
 
-  const camera = new THREE.PerspectiveCamera(55, 9 / 16, 0.5, 600);
-  camera.position.set(0, 150, 110);
+  const camera = new THREE.PerspectiveCamera(55, 9 / 16, 0.5, 1600);
+  camera.position.set(0, 400, 290);
   camera.lookAt(0, 0, 0);
 
   scene.add(new THREE.HemisphereLight(0xfff4dc, 0x3a4a3f, 0.95));
   const sun = new THREE.DirectionalLight(0xfff1d6, 1.35);
-  sun.position.set(60, 120, 50);
+  sun.position.set(110, 220, 95);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(4096, 4096);
   const s = sun.shadow.camera as THREE.OrthographicCamera;
-  s.left = -110;
-  s.right = 110;
-  s.top = 90;
-  s.bottom = -90;
+  s.left = -160;
+  s.right = 160;
+  s.top = 130;
+  s.bottom = -130;
   s.near = 10;
-  s.far = 320;
+  s.far = 520;
   scene.add(sun, sun.target);
   const rim = new THREE.DirectionalLight(0x93c5fd, 0.3);
   rim.position.set(-60, 50, -60);

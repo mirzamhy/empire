@@ -38,7 +38,7 @@ if (studio || params.has("free")) {
   director.enabled = false;
   controls = new OrbitControls(view.camera, view.renderer.domElement);
   controls.target.set(0, 0, 0);
-  view.camera.position.set(0, 150, 110);
+  view.camera.position.set(0, 400, 290);
   controls.update();
 }
 
@@ -139,6 +139,14 @@ function dispatch(now: number) {
   }
 }
 
+// The world is too big for one sharp shadow map: the shadow box follows the camera focus.
+const sunOffset = view.sun.position.clone();
+function followSun() {
+  const f = controls ? controls.target : director.focus;
+  view.sun.target.position.set(f.x, 0, f.z);
+  view.sun.position.set(f.x + sunOffset.x, sunOffset.y, f.z + sunOffset.z);
+}
+
 const clock = new THREE.Clock();
 let fps = 60;
 let paintTimer = 0;
@@ -160,6 +168,7 @@ function frame() {
   fx.update(sim, t);
   director.update(sim, t, dt);
   controls?.update();
+  followSun();
   hud?.update(t);
   view.renderer.render(view.scene, view.camera);
   requestAnimationFrame(frame);
@@ -189,6 +198,7 @@ Object.assign(window, {
       units.update(sim, now);
       fx.update(sim, now);
       for (let i = 0; i < 60; i++) director.update(sim, now, 0.05);
+      followSun();
       hud?.update(now);
       view.renderer.render(view.scene, view.camera);
     },
