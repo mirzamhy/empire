@@ -1,0 +1,33 @@
+{
+  "name": "empire-tiktok-live",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "EMPIRE: TikTok LIVE kingdom war game. Viewers join with their username and gifts send troops.",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "game": "vite --config vite.config.ts",
+    "bridge": "tsx bridge/src/index.ts",
+    "build": "vite build --config vite.config.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "smoke": "tsx scripts/sim-smoke.ts",
+    "check": "npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "three": "0.169.0",
+    "ws": "8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.9.0",
+    "@types/three": "0.169.0",
+    "@types/ws": "8.5.13",
+    "tsx": "4.19.2",
+    "typescript": "5.6.3",
+    "vite": "5.4.11",
+    "vitest": "2.1.5"
+  },
+  "optionalDependencies": {
+    "tiktok-live-connector": "^2.5.0"
+  }
+}

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>EMPIRE Admin</title>
+<style>
+  :root { --bg:#141317; --panel:#1f1d23; --line:#34313a; --text:#f1eee8; --mute:#9a95a3; --gold:#e8b649; --red:#d9534f; --green:#4caf7a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.4 system-ui, sans-serif; }
+  header { display:flex; gap:12px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; color:var(--gold); letter-spacing:.08em; }
+  .pill { padding:2px 10px; border-radius:99px; border:1px solid var(--line); font-size:12px; }
+  .ok { color:var(--green); border-color:var(--green); } .bad { color:var(--red); border-color:var(--red); }
+  main { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px; padding:12px 16px; }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
+  h2 { font-size:13px; margin:0 0 10px; color:var(--mute); text-transform:uppercase; letter-spacing:.06em; }
+  .row { display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap; }
+  input, select { background:#111; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; min-width:0; flex:1; }
+  button { background:#2c2932; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 10px; cursor:pointer; }
+  button:hover { border-color:var(--gold); }
+  button.danger { border-color:var(--red); color:var(--red); }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  td { padding:3px 4px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .mute { color:var(--mute); }
+  pre { margin:0; font-size:12px; white-space:pre-wrap; color:var(--mute); }
+</style>
+</head>
+<body>
+<header>
+  <h1>EMPIRE ADMIN</h1>
+  <span id="live" class="pill">…</span>
+  <span id="gameLink" class="pill">game: …</span>
+  <span id="src" class="pill">source: …</span>
+  <span id="round" class="pill mute">ronde: …</span>
+</header>
+<main>
+  <section>
+    <h2>Sumber live</h2>
+    <div class="row"><input id="ttUser" placeholder="username TikTok (tanpa @)" /><button data-src="tiktok">Hubungkan TikTok</button></div>
+    <div class="row"><button data-src="mock">Kembali ke DEMO</button><button id="reconnect">Hubungkan ulang</button></div>
+    <div class="row"><button id="killOn" class="danger">Kill switch ON</button><button id="killOff">Kill switch OFF</button></div>
+    <pre id="provider"></pre>
+  </section>
+  <section>
+    <h2>Simulator penonton (DEMO)</h2>
+    <div class="row"><input id="user" value="budi_raja" placeholder="username" /></div>
+    <div class="row"><button data-chat="ikut">ikut</button><button data-chat="bertahan">bertahan</button><button data-chat="bebas">bebas</button><button data-chat="boss">boss</button></div>
+    <div class="row"><input id="chatText" placeholder="komentar, mis. serang sari" /><button id="sendChat">Kirim</button></div>
+    <div class="row">
+      <select id="gift">
+        <option value="Rose">Rose (1)</option><option value="TikTok">TikTok (1)</option><option value="Finger Heart">Finger Heart (5)</option>
+        <option value="Perfume">Perfume (20)</option><option value="Doughnut">Doughnut (30)</option><option value="Hand Hearts">Hand Hearts (100)</option>
+        <option value="Corgi">Corgi (299)</option><option value="Money Gun">Money Gun (500)</option><option value="Galaxy">Galaxy (1000)</option><option value="Lion">Lion (29999)</option>
+      </select>
+      <input id="repeat" type="number" value="1" min="1" max="99" style="max-width:70px" />
+      <button id="sendGift">Gift</button><button id="sendStreak">Streak x5</button>
+    </div>
+    <div class="row"><button id="like30">+30 like</button><button id="follow">follow</button><button id="share">share</button></div>
+    <div class="row"><button id="join10">10 penonton ikut</button><button id="join30">30 penonton ikut</button></div>
+    <div class="row"><button id="autoOn">Penonton otomatis ON</button><button id="autoOff">OFF</button></div>
+  </section>
+  <section>
+    <h2>Ronde</h2>
+    <div class="row"><button data-op="pause">Jeda</button><button data-op="resume">Lanjut</button><button data-op="next_phase">Fase berikut</button></div>
+    <div class="row"><button data-op="extend_round">+5 menit</button><button data-op="reset_round" class="danger">Reset ronde</button></div>
+    <div class="row"><input id="kickUser" placeholder="username" /><button id="kick" class="danger">Tendang</button></div>
+    <pre id="gameStat"></pre>
+  </section>
+  <section style="grid-column:1/-1">
+    <h2>Event terakhir</h2>
+    <pre id="counts"></pre>
+    <table><tbody id="recent"></tbody></table>
+  </section>
+</main>
+<script>
+  const token = new URLSearchParams(location.search).get("token");
+  const $ = (id) => document.getElementById(id);
+  let ws;
+  function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+  function connect() {
+    ws = new WebSocket(`ws://${location.host}/ws/admin${token ? "?token=" + encodeURIComponent(token) : ""}`);
+    ws.onmessage = (ev) => { const m = JSON.parse(ev.data); if (m.type === "status") render(m.data); };
+    ws.onclose = () => setTimeout(connect, 1500);
+  }
+  function esc(s) { return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" })[c]); }
+  function render(s) {
+    $("live").textContent = s.liveLabel + (s.killSwitch ? " · KILL" : "");
+    $("live").className = "pill " + (s.liveLabel === "LIVE_CONNECTED" ? "ok" : s.liveLabel === "DEMO" ? "" : "bad");
+    $("gameLink").textContent = "game: " + (s.gameConnected ? "terhubung" : "putus");
+    $("gameLink").className = "pill " + (s.gameConnected ? "ok" : "bad");
+    $("src").textContent = "source: " + s.source + (s.autoDemo ? " (auto)" : "");
+    $("provider").textContent = JSON.stringify(s.provider, null, 1);
+    const g = s.game;
+    $("round").textContent = g ? `ronde ${g.roundId} · ${g.phase} · ${Math.floor(g.secondsLeft / 60)}:${String(g.secondsLeft % 60).padStart(2, "0")}${g.paused ? " · JEDA" : ""}` : "ronde: -";
+    $("gameStat").textContent = g ? `kerajaan ${g.kingdoms} · pasukan ${g.units} · antrean ${g.joinQueue} · fps ${g.fps}\npemimpin: ${g.leader ?? "-"}` : "game belum kirim status";
+    $("counts").textContent = Object.entries(s.counts).map(([k, v]) => `${k} ${v}`).join(" · ") + ` · buffer ${s.buffered}`;
+    $("recent").innerHTML = s.recent.map((r) => `<tr><td class="mute">${esc(r.at.slice(11, 19))}</td><td>${esc(r.kind)}</td><td>${esc(r.user)}</td><td>${esc(r.detail)}</td><td class="mute">${esc(r.source)} · ${esc(r.result)}</td></tr>`).join("");
+  }
+  const user = () => $("user").value.trim() || "budi_raja";
+  document.querySelectorAll("[data-src]").forEach((b) => b.onclick = () => send({ type: "setSource", source: b.dataset.src, username: $("ttUser").value.trim() }));
+  document.querySelectorAll("[data-chat]").forEach((b) => b.onclick = () => send({ type: "chat", username: user(), text: b.dataset.chat }));
+  document.querySelectorAll("[data-op]").forEach((b) => b.onclick = () => send({ type: "control", op: b.dataset.op }));
+  $("reconnect").onclick = () => send({ type: "connect" });
+  $("killOn").onclick = () => send({ type: "killSwitch", on: true });
+  $("killOff").onclick = () => send({ type: "killSwitch", on: false });
+  $("sendChat").onclick = () => send({ type: "chat", username: user(), text: $("chatText").value });
+  $("sendGift").onclick = () => send({ type: "gift", username: user(), giftName: $("gift").value, repeatCount: Number($("repeat").value) || 1 });
+  $("sendStreak").onclick = () => send({ type: "streak", username: user(), giftName: $("gift").value, count: 5 });
+  $("like30").onclick = () => send({ type: "like", username: user(), count: 30 });
+  $("follow").onclick = () => send({ type: "social", kind: "follow", username: user() });
+  $("share").onclick = () => send({ type: "social", kind: "share", username: user() });
+  $("join10").onclick = () => send({ type: "joinMany", n: 10 });
+  $("join30").onclick = () => send({ type: "joinMany", n: 30 });
+  $("autoOn").onclick = () => send({ type: "auto", on: true });
+  $("autoOff").onclick = () => send({ type: "auto", on: false });
+  $("kick").onclick = () => send({ type: "control", op: "kick", target: $("kickUser").value.trim() });
+  connect();
+</script>
+</body>
+</html>
