@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "join": { "keywords": ["ikut", "join", "gabung"], "autoJoinOnGift": true },
+  "commands": {
+    "attack": ["serang", "attack", "serbu"],
+    "defend": ["bertahan", "defend", "jaga"],
+    "free": ["bebas", "free"],
+    "boss": ["boss", "naga"],
+    "info": ["info", "status"]
+  },
+  "likes": { "perUnit": 30, "unit": "spearman", "maxUnitsPerMinute": 10 },
+  "share": { "units": { "archer": 3 }, "cooldownSeconds": 120 },
+  "follow": { "units": { "spearman": 5 }, "oncePerRound": true },
+  "gift": {
+    "maxTierLoops": 5,
+    "leftoverBuffSeconds": 30,
+    "valueTiers": [
+      { "minValue": 5000, "units": { "demon": 1 }, "event": "WORLD_DRAGON" },
+      { "minValue": 1000, "units": { "demon": 1 }, "castleLevel": 1 },
+      { "minValue": 299, "units": { "dragon": 1 } },
+      { "minValue": 99, "units": { "golem": 1, "necromancer": 2 } },
+      { "minValue": 30, "units": { "wizard": 3, "paladin": 2 } },
+      { "minValue": 10, "units": { "cavalry": 3 } },
+      { "minValue": 5, "units": { "swordsman": 3 } },
+      { "minValue": 1, "perCoin": { "spearman": 3 } }
+    ],
+    "nameOverrides": [
+      { "giftName": "Rose", "value": 1, "note": "seen in DEADZONE live test" },
+      { "giftName": "TikTok", "value": 1, "note": "seen in DEADZONE live test" },
+      { "giftName": "Finger Heart", "value": 5, "note": "seen in DEADZONE live test" },
+      { "giftName": "Doughnut", "value": 30, "note": "seen in DEADZONE live test" }
+    ]
+  }
+}

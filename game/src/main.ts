@@ -1,8 +1,9 @@
-// EMPIRE game entry. F3: sim + terrain + castles + instanced units. ?studio shows all 10 unit models.
+// EMPIRE game entry. F4: sim + terrain + castles + instanced units. ?studio shows all 10 unit models.
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { SCHEMA_VERSION, validateCommand, type GameStatusMessage } from "../../shared/contract";
 import { BridgeClient } from "./net/bridgeClient";
+import { LiveRouter, type RouteResult } from "./live/router";
 import { loadConfig, UNIT_TYPES } from "./sim/config";
 import { WorldMap } from "./sim/map";
 import { Sim } from "./sim/world";
@@ -50,16 +51,37 @@ if (params.has("studio")) {
 }
 controls.update();
 
-const bridge = new BridgeClient(
-  `ws://127.0.0.1:8788/ws/game`,
-  (raw) => {
-    const v = validateCommand(raw);
-    if (!v.ok || v.cmd.type !== "game.live") return;
-    const e = v.cmd.event;
-    if (e.kind === "chat" && /\b(ikut|join|gabung)\b/i.test(e.chat!.text)) sim.join(e.user.username, e.user.displayName);
-  },
-  () => {},
-);
+const router = new LiveRouter(sim);
+let liveState = "DEMO";
+
+function onCommand(raw: unknown) {
+  const v = validateCommand(raw);
+  if (!v.ok) return;
+  const cmd = v.cmd;
+  if (cmd.type === "game.live") {
+    let res: RouteResult;
+    try {
+      res = router.handle(cmd.event);
+    } catch (err) {
+      console.error("router error", err);
+      res = { status: "rejected", reason: "handler_error" };
+    }
+    bridge.send({ schemaVersion: SCHEMA_VERSION, type: "game.ack", commandId: cmd.commandId, status: res.status, reason: res.reason });
+  } else if (cmd.type === "game.control") {
+    switch (cmd.op) {
+      case "pause": sim.paused = true; break;
+      case "resume": sim.paused = false; break;
+      case "next_phase": sim.nextPhase(); break;
+      case "extend_round": sim.extend(300); break;
+      case "reset_round": sim.resetRound(); break;
+      case "safe_mode_on": router.safeMode = true; break;
+      case "safe_mode_off": router.safeMode = false; break;
+      case "kick": if (cmd.target) sim.kick(cmd.target); break;
+    }
+  } else if (cmd.type === "game.overlay") liveState = cmd.liveState;
+}
+
+const bridge = new BridgeClient(`ws://127.0.0.1:8788/ws/game`, onCommand, () => {});
 bridge.connect();
 
 const clock = new THREE.Clock();
@@ -83,10 +105,10 @@ frame();
 setInterval(() => {
   const status: GameStatusMessage = {
     schemaVersion: SCHEMA_VERSION, type: "game.status", roundId: sim.roundId, phase: sim.phase, secondsLeft: sim.secondsLeft(),
-    paused: sim.paused, safeMode: false, fps: Math.round(fps), kingdoms: sim.alive.length, units: sim.units.length,
+    paused: sim.paused, safeMode: router.safeMode, fps: Math.round(fps), kingdoms: sim.alive.length, units: sim.units.length,
     joinQueue: sim.joinQueue.length, leader: sim.leaderboard()[0]?.name ?? null,
   };
   bridge.send(status);
 }, 1000);
 
-Object.assign(window, { __em: { sim, map, view, units, controls, render: () => view.renderer.render(view.scene, view.camera) } });
+Object.assign(window, { __em: { sim, router, liveState: () => liveState, map, view, units, controls, render: () => view.renderer.render(view.scene, view.camera) } });

@@ -6,7 +6,7 @@ tags: [empire, gift, config]
 
 Prinsip sama dengan DEADZONE (`../tiktok/config/events.config.json`):
 - Gift adalah input tervalidasi, bukan perintah mentah.
-- Proses gift streak saat `final`, nilai = koin × `repeat`.
+- Proses gift streak saat `final`. Tier dihitung dari nilai **satu** gift, lalu hadiahnya dikali `repeat` (5 Rose = 5 × 3 Spearman = 15).
 - Dedupe 15 dtk, gabung gift kecil dari user yang sama dalam 1,8 dtk.
 - Mapping nama spesifik **harus dicek dari event nyata** di LIVE. Harga koin di bawah adalah perkiraan umum dan bisa beda per wilayah/waktu.
 - Gift tanpa mapping nama jatuh ke **tier nilai**.
@@ -14,7 +14,7 @@ Prinsip sama dengan DEADZONE (`../tiktok/config/events.config.json`):
 
 ## Tier nilai (cadangan utama)
 
-| Nilai (koin × repeat) | Pasukan |
+| Nilai satu gift (koin) | Pasukan |
 |---|---|
 | 1–4 | 3 Spearman per koin |
 | 5–9 | 3 Knight |
@@ -25,7 +25,7 @@ Prinsip sama dengan DEADZONE (`../tiktok/config/events.config.json`):
 | 1000–4999 | 1 Demon Lord + kastil naik 1 level |
 | 5000+ | Panggil Naga Dunia atas nama pengirim + 1 Demon Lord |
 
-Nilai di atas batas tier tidak dikalikan terus. Contoh: 600 koin = 1 Dragon + sisa 301 dihitung ulang sebagai tier 299 = 1 Dragon lagi. Loop berhenti setelah 5 iterasi; sisanya jadi emas.
+Nilai satu gift di atas batas tier dihitung ulang dari sisanya. Contoh: gift 600 koin = 1 Dragon + sisa 301 = 1 Dragon lagi. Loop berhenti setelah 5 iterasi; sisanya jadi buff 30 dtk. Konfigurasi aktif ada di `config/events.config.json`.
 
 ## Kandidat mapping nama (cek dulu)
 
