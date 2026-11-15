@@ -15,7 +15,7 @@
     "shieldSeconds": 45,
     "rejoinCooldownSeconds": 60,
     "reserveHoldSeconds": 60,
-    "spawnMinDist": 10,
+    "spawnMinDist": 20,
     "unitCapBase": 40,
     "unitCapPerLevel": 10,
     "unitCapMax": 140,

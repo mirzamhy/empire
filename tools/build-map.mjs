@@ -1,8 +1,13 @@
-// Reference image -> biome grid for the game. Run: powershell tools/sample-map.ps1, then node tools/build-map.mjs
+// Reference image -> biome grid for the game. Run: powershell tools/sample-map.ps1, then node tools/build-map.mjs 2
 import { writeFileSync } from "node:fs";
-import { rows, w, h } from "./classify.mjs";
+import { rows, w as w0, h as h0 } from "./classify.mjs";
 
+// Upscale factor: classify at the sampled resolution (clean shapes), then grow the grid so the
+// world gets bigger without changing the cell size. Run: node tools/build-map.mjs [scale]
+const SCALE = Number(process.argv[2] ?? 2);
 let g = rows.map((r) => r.split(""));
+let w = w0;
+let h = h0;
 const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? "~" : g[y][x]);
 
 // 1. Majority filter (2 passes) to remove speckles from the painted trees and labels.
@@ -16,6 +21,24 @@ for (let pass = 0; pass < 2; pass++) {
       if (cnt >= 5 && best !== g[y][x]) n[y][x] = best;
     }
   g = n;
+}
+
+// 1b. Nearest upscale, then smooth the staircase edges with the same majority filter.
+if (SCALE > 1) {
+  g = Array.from({ length: h * SCALE }, (_, y) => Array.from({ length: w * SCALE }, (_, x) => g[(y / SCALE) | 0][(x / SCALE) | 0]));
+  w *= SCALE;
+  h *= SCALE;
+  for (let pass = 0; pass < 2; pass++) {
+    const n = g.map((r) => r.slice());
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const c = {};
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) c[at(x + dx, y + dy)] = (c[at(x + dx, y + dy)] ?? 0) + 1;
+        const [best, cnt] = Object.entries(c).sort((a, b) => b[1] - a[1])[0];
+        if (cnt >= 5 && best !== g[y][x]) n[y][x] = best;
+      }
+    g = n;
+  }
 }
 
 // 2. Land next to water becomes beach ("b") so coasts read clearly and slope gently.

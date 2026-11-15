@@ -7,7 +7,7 @@ export type Biome = "water" | "beach" | "plains" | "desert" | "forest" | "mounta
 const CODE: Record<string, Biome> = { "~": "water", b: "beach", s: "plains", d: "desert", f: "forest", m: "mountain" };
 
 /** metres per grid cell */
-export const CELL = 1.5;
+export const CELL = 2.25;
 export const GRID_W = MAP_W;
 export const GRID_H = MAP_H;
 export const WORLD_W = GRID_W * CELL;

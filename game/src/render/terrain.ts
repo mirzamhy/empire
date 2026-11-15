@@ -129,16 +129,17 @@ export function buildTerrain(map: WorldMap): TerrainHandles {
   const mtx = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const up = new THREE.Vector3(0, 1, 0);
+  const dens = (CELL / 1.5) ** 2; // keep trees per square metre constant when the cell size changes
   for (let i = 0; i < GRID_W * GRID_H; i++) {
     const b = map.biome[i];
     const p = map.cellCenter(i);
     const r = rng.next();
     let kind: keyof typeof kinds | null = null;
-    if (b === "forest" && r < 0.3) kind = rng.next() < 0.6 ? "oak" : "pine";
-    else if (b === "plains" && r < 0.04) kind = "oak";
-    else if (b === "desert" && r < 0.05) kind = "palm";
-    else if (b === "mountain" && r < 0.12) kind = rng.next() < 0.5 ? "pine" : "rock";
-    else if (b === "beach" && r < 0.02) kind = "rock";
+    if (b === "forest" && r < 0.3 * dens) kind = rng.next() < 0.6 ? "oak" : "pine";
+    else if (b === "plains" && r < 0.04 * dens) kind = "oak";
+    else if (b === "desert" && r < 0.05 * dens) kind = "palm";
+    else if (b === "mountain" && r < 0.12 * dens) kind = rng.next() < 0.5 ? "pine" : "rock";
+    else if (b === "beach" && r < 0.02 * dens) kind = "rock";
     if (!kind) continue;
     const x = p.x + (rng.next() - 0.5) * CELL * 0.8;
     const z = p.z + (rng.next() - 0.5) * CELL * 0.8;
