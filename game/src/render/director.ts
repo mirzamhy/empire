@@ -109,6 +109,8 @@ export class Director {
     this.desired.set(s.x, this.target.y + d * 0.95, s.z + d * 0.62);
     const k = 1 - Math.exp(-dt * (s.label === "overview" ? 1.2 : 2.2));
     this.base.lerp(this.desired, k);
+    // never dip into a mountainside
+    this.base.y = Math.max(this.base.y, this.map.heightAt(this.base.x, this.base.z) + 8);
     this.look.lerp(this.target, 1 - Math.exp(-dt * 3));
     this.camera.position.copy(this.base);
     this.camera.lookAt(this.look);

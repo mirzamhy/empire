@@ -33,7 +33,8 @@
     "unlocks": [
       { "level": 1, "units": ["spearman"] },
       { "level": 3, "units": ["spearman", "swordsman", "archer"] },
-      { "level": 8, "units": ["spearman", "swordsman", "archer", "cavalry", "wizard"] }
+      { "level": 5, "units": ["spearman", "swordsman", "archer", "halberdier"] },
+      { "level": 8, "units": ["spearman", "swordsman", "archer", "halberdier", "cavalry", "wizard"] }
     ]
   },
   "exp": {
@@ -59,13 +60,21 @@
     "swordsman":   { "hp": 155, "dmg": 20, "range": 1.5, "speed": 4.4, "scale": 0.42 },
     "archer":      { "hp": 90,  "dmg": 18, "range": 9.0, "speed": 4.2, "scale": 0.42, "ranged": true },
     "wizard":      { "hp": 110, "dmg": 32, "range": 8.0, "speed": 4.0, "scale": 0.44, "ranged": true, "splash": 1.5 },
-    "paladin":     { "hp": 220, "dmg": 25, "range": 1.7, "speed": 4.1, "scale": 0.46, "heal": 12, "healRange": 4 },
-    "necromancer": { "hp": 170, "dmg": 30, "range": 7.5, "speed": 4.0, "scale": 0.45, "ranged": true, "raise": 3 },
-    "cavalry":     { "hp": 250, "dmg": 32, "range": 1.9, "speed": 6.4, "scale": 0.40 },
-    "golem":       { "hp": 550, "dmg": 52, "range": 2.1, "speed": 3.1, "scale": 0.55, "arrowResist": 0.3 },
+    "paladin":     { "hp": 220, "dmg": 25, "range": 1.7, "speed": 4.1, "scale": 0.46, "heal": 12, "healRange": 4, "tags": ["support"] },
+    "necromancer": { "hp": 170, "dmg": 30, "range": 7.5, "speed": 4.0, "scale": 0.45, "ranged": true, "raise": 3, "tags": ["support"] },
+    "cavalry":     { "hp": 250, "dmg": 32, "range": 1.9, "speed": 6.4, "scale": 0.40, "tags": ["big"] },
+    "golem":       { "hp": 550, "dmg": 52, "range": 2.1, "speed": 3.1, "scale": 0.55, "arrowResist": 0.3, "tags": ["big"] },
     "dragon":      { "hp": 750, "dmg": 70, "range": 6.0, "speed": 5.8, "scale": 0.5, "flying": true, "splash": 2 },
-    "demon":       { "hp": 1100, "dmg": 95, "range": 2.4, "speed": 4.2, "scale": 0.62, "aura": 0.1, "auraRange": 6 },
-    "skeleton":    { "hp": 60,  "dmg": 10, "range": 1.5, "speed": 4.4, "scale": 0.38 }
+    "demon":       { "hp": 1100, "dmg": 95, "range": 2.4, "speed": 4.2, "scale": 0.62, "aura": 0.1, "auraRange": 6, "tags": ["big"] },
+    "skeleton":    { "hp": 60,  "dmg": 10, "range": 1.5, "speed": 4.4, "scale": 0.38 },
+    "halberdier":  { "hp": 170, "dmg": 22, "range": 2.4, "speed": 4.1, "scale": 0.42, "bonusVs": { "big": 0.6 } },
+    "shieldbearer":{ "hp": 320, "dmg": 12, "range": 1.6, "speed": 3.8, "scale": 0.44, "taunt": 5, "cover": 0.4, "coverRange": 3.5 },
+    "berserker":   { "hp": 200, "dmg": 26, "range": 1.7, "speed": 5.0, "scale": 0.43, "rage": 1 },
+    "assassin":    { "hp": 110, "dmg": 40, "range": 1.5, "speed": 6.0, "scale": 0.40, "stealth": true, "hunts": ["ranged", "support"], "dodge": 0.4 },
+    "engineer":    { "hp": 130, "dmg": 10, "range": 1.5, "speed": 4.2, "scale": 0.42, "builds": true, "tags": ["support"] },
+    "ballista":    { "hp": 260, "dmg": 45, "range": 14,  "speed": 2.6, "scale": 0.50, "ranged": true, "tags": ["siege"], "bonusVs": { "flying": 1, "dragon": 1 } },
+    "elephant":    { "hp": 900, "dmg": 48, "range": 2.6, "speed": 3.4, "scale": 0.60, "arrowResist": 0.2, "tags": ["big"], "trample": 20 },
+    "trebuchet":   { "hp": 300, "dmg": 160, "range": 18, "speed": 2.2, "scale": 0.55, "ranged": true, "splash": 3, "minRange": 6, "tags": ["siege"], "bonusVs": { "castle": 3, "unit": -0.75 } }
   },
   "dragon": {
     "hpBase": 1500,
@@ -96,7 +105,12 @@
     "spawnUnit": "spearman",
     "captureExp": 80,
     "expandRange": 70,
-    "expandShare": 3
+    "expandShare": 3,
+    "towerBuildSeconds": 20,
+    "towerRange": 11,
+    "towerDamage": 12,
+    "towerCooldown": 1.2,
+    "buildRange": 90
   },
   "score": {
     "perTile": 2,

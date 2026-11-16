@@ -305,7 +305,7 @@ const SHOT_COLOR: Record<string, number> = {
   tower: 0xd9d4c7,
 };
 
-const HEAVY: Partial<Record<ShotType, number>> = { golem: 1.3, demon: 1.6, cavalry: 0.8, paladin: 0.6, dragon: 1.4 };
+const HEAVY: Partial<Record<ShotType, number>> = { golem: 1.3, demon: 1.6, cavalry: 0.8, paladin: 0.6, dragon: 1.4, elephant: 1.5, trebuchet: 1.8, halberdier: 0.6, berserker: 0.5, ballista: 0.7 };
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
@@ -349,6 +349,16 @@ export class Fx {
   private c = new THREE.Color();
   private dragon: THREE.Group;
   private dragonLimbs: { rightArm?: THREE.Object3D; leftArm?: THREE.Object3D };
+  private dragonJaw?: THREE.Object3D;
+  private dragonNeck?: THREE.Object3D;
+  private dragonMouth?: THREE.Object3D;
+  private dragonYaw = 0;
+  private dragonAim = 0;
+  private dragonBreathUntil = -9;
+  /** Fire streams: flames pour from a mouth to a target for a short while. id = unit, undefined = World Dragon. */
+  private breaths: { id?: number; tx: number; ty: number; tz: number; t0: number; until: number; scale: number }[] = [];
+  /** World position of a unit's socket; wired by main.ts to the unit renderer. */
+  socketOf: (unitId: number, socket: "mouth" | "muzzle" | "weaponTip", out: THREE.Vector3) => boolean = () => false;
 
   constructor(private map: WorldMap) {
     const additive = () => new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false });
@@ -396,6 +406,9 @@ export class Fx {
     const dragonModel = modelFor("dragon", 3, "#d4a017", "#facc15");
     this.dragon = dragonModel.root;
     this.dragonLimbs = { rightArm: dragonModel.bones.wingR, leftArm: dragonModel.bones.wingL };
+    this.dragonJaw = dragonModel.bones.jaw;
+    this.dragonNeck = dragonModel.bones.neck1;
+    this.dragonMouth = dragonModel.sockets.mouth;
     this.dragon.scale.setScalar(2.6);
     this.dragon.visible = false;
     this.group.add(this.dragon);
@@ -419,8 +432,8 @@ export class Fx {
         if (this.bolts.length >= 500) this.bolts.shift();
         const d = Math.hypot(e.x - e.fromX, e.z - e.fromZ);
         const dragon = e.type === "dragon";
-        const lob = e.type === "archer" || e.type === "tower";
-        const speed = dragon ? 26 : lob ? 28 : e.type === "wizard" ? 20 : 24;
+        const lob = e.type === "archer" || e.type === "tower" || e.type === "trebuchet";
+        const speed = lob ? 28 : e.type === "wizard" ? 20 : 24;
         const fy = h(e.fromX, e.fromZ) + (dragon ? 7 : e.type === "tower" ? 4.5 : 1.3);
         // castle shots land on the wall facing the shooter, not inside the keep
         const back = e.on === "castle" ? Math.min(2.2, d) / (d || 1) : 0;
@@ -430,9 +443,17 @@ export class Fx {
         this.bolts.push({
           type: e.type, fx: e.fromX, fz: e.fromZ, fy, tx, tz, ty,
           cx: e.x, cz: e.z,
-          t0: now, dur: Math.max(0.15, d / speed), arc: lob ? 0.22 * d : 0.04 * d, dmg: e.dmg, on: e.on,
+          t0: now, dur: dragon ? 0.3 : Math.max(0.15, d / speed), arc: e.type === "trebuchet" ? 0.5 * d : lob ? 0.22 * d : 0.04 * d, dmg: e.dmg, on: e.on,
         });
-        if (dragon) this.dragonBreath(e.fromX, fy, e.fromZ, e.x, ty, e.z, now);
+        if (dragon) {
+          // flames leave the mouth for 0.65 s; the World Dragon (no id) also turns to face its target
+          const world = e.id === undefined;
+          this.breaths.push({ id: e.id, tx, ty, tz, t0: now, until: now + 0.65, scale: world ? 2.2 : 1 });
+          if (world) {
+            this.dragonAim = Math.atan2(e.x - e.fromX, e.z - e.fromZ);
+            this.dragonBreathUntil = now + 0.65;
+          }
+        }
         else if (e.type === "wizard") this.burst(this.glow, e.fromX, h(e.fromX, e.fromZ) + 1.5, e.fromZ, now, 4, 0xff9a3a, 1.5, 0.25, 0.3);
         break;
       }
@@ -608,19 +629,41 @@ export class Fx {
     this.ring(x, z, now, 3 * scale, color, 0.4);
   }
 
-  private dragonBreath(fx: number, fy: number, fz: number, tx: number, ty: number, tz: number, now: number) {
-    const dx = tx - fx;
-    const dy = ty - fy;
-    const dz = tz - fz;
-    for (let i = 0; i < 26; i++) {
-      const t = Math.random();
-      this.c.set(Math.random() < 0.3 ? 0xffd25a : 0xff5a1a);
-      this.glow.add({
-        x: fx + dx * t * 0.15, y: fy + dy * t * 0.15, z: fz + dz * t * 0.15,
-        vx: dx * rand(1.1, 1.6) + rand(-1.5, 1.5), vy: dy * rand(1.1, 1.6) + rand(-1, 1), vz: dz * rand(1.1, 1.6) + rand(-1.5, 1.5),
-        t0: now + t * 0.15, life: rand(0.45, 0.7), size: rand(0.5, 0.9), grow: 1.4, gravity: -1, drag: 2,
-        r: this.c.r, g: this.c.g, b: this.c.b, spin: rand(-4, 4), bounce: false,
-      });
+  /** Pour flames from each breathing dragon's mouth toward its target. Called every frame. */
+  private updateBreaths(now: number, dt: number) {
+    if (!this.breaths.length) return;
+    this.breaths = this.breaths.filter((b) => now < b.until);
+    for (const b of this.breaths) {
+      if (now < b.t0) continue;
+      // mouth position: the unit's socket, or the World Dragon model's own mouth marker
+      if (b.id !== undefined) {
+        if (!this.socketOf(b.id, "mouth", this.p)) continue;
+      } else if (this.dragonMouth && this.dragon.visible) {
+        this.dragon.updateMatrixWorld(true);
+        this.dragonMouth.getWorldPosition(this.p);
+      } else continue;
+      const dx = b.tx - this.p.x;
+      const dy = b.ty - this.p.y;
+      const dz = b.tz - this.p.z;
+      const dist = Math.hypot(dx, dy, dz) || 1;
+      const speed = dist / 0.3; // flames reach the target in about 0.3 s
+      const spread = speed * 0.2; // roughly a 12 degree cone
+      const n = Math.max(1, Math.round(dt * 110));
+      for (let i = 0; i < n; i++) {
+        const hot = Math.random();
+        this.c.set(hot < 0.25 ? 0xfff0a0 : hot < 0.6 ? 0xffb030 : 0xff5a1a);
+        this.glow.add({
+          x: this.p.x, y: this.p.y, z: this.p.z,
+          vx: (dx / dist) * speed + rand(-spread, spread), vy: (dy / dist) * speed + rand(-spread, spread), vz: (dz / dist) * speed + rand(-spread, spread),
+          t0: now - Math.random() * dt, life: rand(0.3, 0.42), size: rand(0.28, 0.45) * b.scale, grow: 2.6, gravity: -2, drag: 0.6,
+          r: this.c.r, g: this.c.g, b: this.c.b, spin: rand(-5, 5), bounce: false,
+        });
+      }
+      // the ground burns where the stream lands
+      if (now - b.t0 > 0.25 && Math.random() < dt * 30) {
+        this.burst(this.glow, b.tx + rand(-1, 1) * b.scale, b.ty - 0.4, b.tz + rand(-1, 1) * b.scale, now, 1, 0xff7a1a, 0.8, 0.5 * b.scale, 0.5, 1.5, -2);
+        this.burst(this.dust, b.tx, b.ty, b.tz, now, 1, 0x3a302c, 1.2, 0.6 * b.scale, 1.0, 1.2, -0.6);
+      }
     }
   }
 
@@ -707,6 +750,7 @@ export class Fx {
     this.kingdomColor = (kid) => sim.kingdomById(kid)?.color ?? "#ffffff";
 
     this.updateBolts(now);
+    this.updateBreaths(now, dt);
     this.updateStuck(now);
     this.castleState(sim, now);
     this.flushCastleNumbers(now);
@@ -725,7 +769,16 @@ export class Fx {
       if (this.dragonLimbs.rightArm) this.dragonLimbs.rightArm.rotation.z = -flap;
       if (this.dragonLimbs.leftArm) this.dragonLimbs.leftArm.rotation.z = flap;
       this.dragon.position.set(d.x, this.map.heightAt(d.x, d.z) + 4 + Math.sin(now * 4) * 0.4, d.z);
-      this.dragon.rotation.y = now * 0.5;
+      // circle slowly; while breathing, turn to the target, open the jaw and reach down with the neck
+      const breathing = now < this.dragonBreathUntil;
+      if (breathing) {
+        const diff = Math.atan2(Math.sin(this.dragonAim - this.dragonYaw), Math.cos(this.dragonAim - this.dragonYaw));
+        this.dragonYaw += diff * Math.min(1, dt * 10);
+      } else this.dragonYaw += dt * 0.5;
+      this.dragon.rotation.y = this.dragonYaw;
+      const open = breathing ? 1 : 0;
+      if (this.dragonJaw) this.dragonJaw.rotation.x += (open * 0.6 - this.dragonJaw.rotation.x) * Math.min(1, dt * 14);
+      if (this.dragonNeck) this.dragonNeck.rotation.x += (-0.95 + open * 0.75 - this.dragonNeck.rotation.x) * Math.min(1, dt * 10);
       const hit = sim.t - d.attackAt;
       this.dragon.scale.setScalar(2.6 + (hit >= 0 && hit < 0.3 ? 0.15 : 0));
       if (Math.random() < dt * 6) this.burst(this.glow, d.x, this.dragon.position.y + 1.5, d.z, now, 1, 0xff5a1a, 0.6, 0.4, 0.6, 1, -1.5);
@@ -749,22 +802,22 @@ export class Fx {
       const z = b.fz + (b.tz - b.fz) * t;
       const y = b.fy + (b.ty - b.fy) * t + Math.sin(t * Math.PI) * b.arc;
       this.p.set(x, y, z);
-      if (b.type === "archer") {
+      if (b.type === "archer" || b.type === "ballista") {
         // point along the flight path, including the arc's slope
         const len = Math.hypot(b.tx - b.fx, b.tz - b.fz);
         const vy = (b.ty - b.fy) + Math.cos(t * Math.PI) * Math.PI * b.arc;
         this.e.set(-Math.atan2(vy, len), Math.atan2(b.tx - b.fx, b.tz - b.fz), 0, "YXZ");
         this.q.setFromEuler(this.e);
-        this.s.setScalar(1);
+        this.s.setScalar(b.type === "ballista" ? 2.6 : 1);
         this.m.compose(this.p, this.q, this.s);
         if (na < 300) this.arrowMesh.setMatrixAt(na++, this.m);
-      } else if (b.type === "tower") {
+      } else if (b.type === "tower" || b.type === "trebuchet") {
         this.q.identity();
-        this.s.setScalar(1.2);
+        this.s.setScalar(b.type === "trebuchet" ? 3.2 : 1.2);
         this.m.compose(this.p, this.q, this.s);
         if (ns < 120) this.stoneMesh.setMatrixAt(ns++, this.m);
-      } else {
-        const size = b.type === "dragon" ? 2.4 : b.type === "wizard" ? 1.3 : b.type === "necromancer" ? 1.1 : 0.8;
+      } else if (b.type !== "dragon") {
+        const size = b.type === "wizard" ? 1.3 : b.type === "necromancer" ? 1.1 : 0.8;
         this.q.identity();
         this.s.setScalar(size * (0.9 + Math.sin(now * 40 + b.t0) * 0.1));
         this.m.compose(this.p, this.q, this.s);

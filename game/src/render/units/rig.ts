@@ -31,7 +31,7 @@ export interface BakedRig {
 
 // ---------------------------------------------------------------- prototype adapter
 
-const MODEL_OF: Record<UnitType, string> = {
+const MODEL_OF: Partial<Record<UnitType, string>> = {
   spearman: "spearman",
   swordsman: "swordsman",
   archer: "archer",
@@ -81,7 +81,7 @@ function addSocket(model: UnitModel, name: SocketName, parent: THREE.Object3D, p
  * torso = spine, limbs = arms and legs, horse legs = legFR/legFL/legBR/legBL, dragon arms = wings.
  */
 export function prototypeModel(type: UnitType, tint: string, crest: string): UnitModel {
-  const root = buildReferenceSoldier(MODEL_OF[type], tint, crest);
+  const root = buildReferenceSoldier(MODEL_OF[type] ?? "spearman", tint, crest);
   const d = root.userData as {
     unitType: string;
     limbs?: Record<string, THREE.Object3D>;

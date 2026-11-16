@@ -724,6 +724,26 @@ Alat ukur: tambahkan `?perf` untuk menampilkan ms per bagian (`renderer.info`, `
 
 - **Fable kit siap (2026-11-16).** `models/kit.ts` (helper), `models/_reference.ts` (humanoid contoh, lolos kontrak), `models/index.ts` (registry `MODELS`, `bakeUnit` memakainya), tes otomatis untuk semua file di `models/` (3 tier, deterministik), `docs/fable/` (aturan, brief Naga, README) dan `npm run fable -- <unit>` yang membuat prompt lengkap di `docs/fable/out/`. Belum: Kodeks belum menampilkan model baru (V1), brief unit lain.
 
+- **V4 selesai lebih awal (2026-11-16).** 11 model unit lama ditulis di `models/` (kerangka bersama `kit-human.ts`), 3 tingkat zirah, dipilih renderer dari level kerajaan. Skeleton punya model sendiri. Naga Dunia memakai model Naga tingkat 3. LOD1 belum dibuat.
+- **V1 selesai (2026-11-16).** Lab Animasi di Kodeks: tombol Diam, Jalan, Serang, kecepatan 1x/0,5x/0,2x, dan tautan `units.html?unit=dragon&level=8&spin=1.6&clip=attack&t=0.4` untuk membekukan satu frame.
+- **V2 sebagian (2026-11-16).** Klip serangan per unit di `anims.ts`: stab (Spearman, Skeleton), slash (Knight), shoot (Ranger), cast (Wizard, Necromancer), slam (Paladin), punch (Golem), cleave (Demon), charge (Cavalry), plus sayap Demon. Karena sim belum punya `windup`, klip mulai dari posisi ancang-ancang dan mencapai kontak dalam ±0,1 dtk. Belum: jasad dan animasi mati, klip hit, spawn, run.
+- **V3 sebagian (2026-11-16).** Klip terbang Naga (sayap dua ruas, ekor, leher) dan klip semburan (leher turun, rahang terbuka). Api mengalir dari socket `mouth` ke sasaran selama 0,65 dtk, tanah terbakar di titik kena, bola oranye dan offset +7 dihapus. Naga Dunia berputar menghadap sasaran dan membuka rahang. Event `shot` kini membawa `id` unit. Belum: `windup` sim, damage bertahap, pool cahaya.
+
+- **V6 sebagian (2026-11-16).** `terrain.ts` ditulis ulang:
+  - warna tanah dihitung sekali per segitiga di CPU (batas biome bergerigi, petak rumput tua/muda, batu di lereng, salju di atas ±8,3 m, pasir basah, lembah lebih gelap), jadi tanpa biaya per frame;
+  - bayangan awan bergerak di shader terrain;
+  - air: warna dangkal ke dalam dari jarak ke daratan, garis buih yang maju-mundur, gelombang rendah;
+  - 15 jenis tanaman (3 ek, 3 pinus, birch, semak, pohon mati, kaktus, palem, 2 batu, rumput, bunga), ditempatkan dengan noise kepadatan, warna daun berbeda per pohon, bergoyang kena angin. Sekitar 7.000 instance.
+  - Belum: sungai, jalan, jembatan, landmark (V7), rumput rapat dekat kamera, interaksi ledakan.
+- **V5 sebagian (2026-11-16).** `atmosphere.ts`: suasana per fase (pagi di LOBBY, siang di WAR, sore jingga di FINAL, senja ungu di RESULT) dengan peralihan beberapa detik; kubah langit bergradasi; kabut mengikuti warna cakrawala. Bayangan kontak (cakram gelap lembut) di bawah setiap unit. Belum: tone mapping ACES, bloom, vignette (perlu diukur dulu di PC streaming).
+
+- **V8 selesai (2026-11-16).** 8 unit baru: Halberdier, Shieldbearer, Berserker, Assassin, Engineer, Ballista, Gajah Perang, Trebuchet.
+  - Sim: tag (`big`, `support`, `siege`), `bonusVs`, `taunt`, `cover`, `rage`, `stealth`, `hunts`, `dodge`, `trample`, `minRange`, `builds`. Desa punya menara jaga (`tower`) yang dibangun Engineer dan hilang saat desa direbut.
+  - Model di `models/` (3 tingkat), klip serangan sendiri, baut Ballista dan batu Trebuchet sebagai proyektil.
+  - Gift: 15 Shieldbearer+Halberdier, 20 Berserker, 50 Assassin, 120 Ballista, 150 Gajah, 200 Trebuchet+Engineer. Halberdier masuk produksi pasif sejak level 5.
+  - Uji 8 seed: 7 ronde selesai dalam 8,2–13,3 menit, seed 7 mencapai batas waktu 16 menit dengan 3 kerajaan tersisa.
+  - Belum: klip `brace`, `sneak`, `load`; efek khusus (asap Assassin, uap Berserker, lingkaran sasaran Trebuchet); kru yang bergerak.
+
 **Urutan yang disarankan:** V0 → V1 → V3 (Naga paling terlihat, sekaligus menguji rig yang rumit) → V2 → V4 → V5 → V6 → V8 → V7. V5 (cahaya) bisa dikerjakan bersamaan dengan V4 karena tidak menyentuh file yang sama.
 
 ---

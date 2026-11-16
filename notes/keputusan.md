@@ -33,3 +33,28 @@ Format: `D-xxx` · tanggal · keputusan · alasan. Keputusan baru ditambah di ba
 - Registry `MODELS` di `models/index.ts`; tipe tanpa entri tetap memakai prototipe, jadi unit diganti satu per satu.
 - `npm run fable -- <unit>` menyatukan aturan, brief, kontrak, helper, dan contoh jadi satu prompt yang berdiri sendiri.
 - Tes menemukan model otomatis (`import.meta.glob`): file baru langsung divalidasi pada 3 tier.
+
+## D-023: Model unit, tingkat zirah, klip per unit, semburan Naga (2026-11-16)
+- Semua 11 unit memakai model di `models/`; prototipe `proto.js` hanya jadi cadangan untuk tipe tanpa entri di `MODELS`.
+- Tingkat zirah dipilih dari level kerajaan (1–4, 5–7, 8+), satu set `InstancedMesh` per tipe × tingkat.
+- Klip serangan dipilih per tipe unit (`clipFor`), bukan per rig. Tanpa `windup` di sim, klip dimulai dari ancang-ancang supaya kontak terjadi dekat saat damage. Perubahan `windup` masih menunggu keputusan (rencana 12.2).
+- Semburan Naga adalah aliran partikel dari socket `mouth`, bukan proyektil. Event `shot` membawa `id` supaya efek tahu unit mana yang menembak; ini tidak mengubah hasil sim.
+
+## D-024: Terrain dan suasana (2026-11-16)
+- Warna terrain di-bake per segitiga di CPU, bukan dihitung di shader: tampilan tetap flat low-poly dan tidak ada biaya per frame. Shader hanya menambah territory dan bayangan awan.
+- Awan sungguhan tidak dibuat karena kamera overview berada 400 m di atas peta dan awan akan menutupinya; yang ada hanya bayangannya.
+- Suasana mengikuti fase ronde (rencana 9.2), bukan siklus siang-malam penuh. Tone mapping dan bloom ditunda sampai ada pengukuran di PC streaming.
+- Semua ini hanya render: sim dan balance tidak berubah.
+
+## D-025: Relief peta diperdalam, luas tetap (2026-11-16)
+- Peta tidak diperluas (tetap 576 x 432 m): pasukan akan makin kecil di layar dan ronde makin lama.
+- Tinggi tanah di `map.ts` dihitung ulang: puncak gunung sekitar 44 m (sebelumnya 9 m) dengan punggungan bergerigi, kaki gunung menanjak, dataran dan hutan berbukit landai (sampai 3 m), bukit pasir di gurun, dasar laut turun sampai -6 m.
+- Sim tidak membaca tinggi tanah (navigasi dan penempatan memakai biome), jadi balance tidak berubah. Noise dipindah ke `sim/noise.ts` supaya peta dan renderer memakai fungsi yang sama.
+- Garis salju naik ke 25 m; kamera sutradara dijaga minimal 8 m di atas tanah.
+
+## D-026: Delapan unit baru (2026-11-16)
+- Kemampuan unit dibaca dari config (`tags`, `bonusVs`, `taunt`, dst.), bukan ditulis per tipe di sim, supaya unit berikutnya cukup menambah baris config.
+- Engineer tidak masuk produksi pasif: saat dicoba di level 8, dua dari 8 seed mencapai batas waktu ronde. Engineer hanya datang dari gift 200 bersama Trebuchet.
+- Stat masih draf dari rencana bagian 6. Hasil 8 seed setelah perubahan: 8,2–13,3 menit untuk 7 seed, 1 seed habis waktu.
+- Assassin tetap digambar penuh (tidak transparan); "siluman" hanya berarti tidak bisa diincar sampai menyerang atau terkena serangan.
+

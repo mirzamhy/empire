@@ -6,6 +6,8 @@ export interface SceneHandles {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   sun: THREE.DirectionalLight;
+  hemi: THREE.HemisphereLight;
+  rim: THREE.DirectionalLight;
   resize(): void;
 }
 
@@ -24,7 +26,8 @@ export function createScene(container: HTMLElement): SceneHandles {
   camera.position.set(0, 400, 290);
   camera.lookAt(0, 0, 0);
 
-  scene.add(new THREE.HemisphereLight(0xfff4dc, 0x3a4a3f, 0.95));
+  const hemi = new THREE.HemisphereLight(0xfff4dc, 0x3a4a3f, 0.95);
+  scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff1d6, 1.35);
   sun.position.set(110, 220, 95);
   sun.castShadow = true;
@@ -52,5 +55,5 @@ export function createScene(container: HTMLElement): SceneHandles {
   };
   window.addEventListener("resize", resize);
   resize();
-  return { renderer, scene, camera, sun, resize };
+  return { renderer, scene, camera, sun, hemi, rim, resize };
 }

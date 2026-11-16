@@ -1,7 +1,9 @@
 // Typed game config. Values live in config/game.config.json.
 import raw from "../../../config/game.config.json";
 
-export const UNIT_TYPES = ["spearman", "swordsman", "archer", "wizard", "paladin", "necromancer", "cavalry", "golem", "dragon", "demon", "skeleton"] as const;
+export const UNIT_TYPES = ["spearman", "swordsman", "archer", "wizard", "paladin", "necromancer", "cavalry", "golem", "dragon", "demon", "skeleton",
+  "halberdier", "shieldbearer", "berserker", "assassin", "engineer", "ballista", "elephant", "trebuchet",
+] as const;
 export type UnitType = (typeof UNIT_TYPES)[number];
 export type UnitBundle = Partial<Record<UnitType, number>>;
 
@@ -20,6 +22,29 @@ export interface UnitStats {
   flying?: boolean;
   aura?: number;
   auraRange?: number;
+  /** labels other units react to: "big", "support", "siege" (flying and ranged count as tags too) */
+  tags?: string[];
+  /** extra damage against a tag, "unit", "castle" or "dragon": 0.6 = +60%, -0.75 = a quarter */
+  bonusVs?: Record<string, number>;
+  /** enemies within this range attack this unit first */
+  taunt?: number;
+  /** allies within coverRange take this much less ranged damage */
+  cover?: number;
+  coverRange?: number;
+  /** extra damage at zero health (scales with missing health) */
+  rage?: number;
+  /** cannot be targeted until its first attack */
+  stealth?: boolean;
+  /** prefers targets with one of these tags */
+  hunts?: string[];
+  /** ranged damage avoided while moving */
+  dodge?: number;
+  /** damage to small ground enemies it walks through */
+  trample?: number;
+  /** cannot attack targets closer than this */
+  minRange?: number;
+  /** builds watchtowers in own villages */
+  builds?: boolean;
 }
 
 export type GameConfig = Omit<typeof raw, "unitTypes" | "kingdom" | "passive"> & {
@@ -44,6 +69,14 @@ export const UNIT_LABEL: Record<UnitType, string> = {
   dragon: "Naga",
   demon: "Demon Lord",
   skeleton: "Skeleton",
+  halberdier: "Halberdier",
+  shieldbearer: "Shieldbearer",
+  berserker: "Berserker",
+  assassin: "Assassin",
+  engineer: "Engineer",
+  ballista: "Ballista",
+  elephant: "Gajah Perang",
+  trebuchet: "Trebuchet",
 };
 
 export const UNIT_ICON: Record<UnitType, string> = {
@@ -58,6 +91,14 @@ export const UNIT_ICON: Record<UnitType, string> = {
   dragon: "🐉",
   demon: "👹",
   skeleton: "☠️",
+  halberdier: "🪓",
+  shieldbearer: "🛡️",
+  berserker: "💢",
+  assassin: "🥷",
+  engineer: "🔨",
+  ballista: "🎯",
+  elephant: "🐘",
+  trebuchet: "🪨",
 };
 
 /** 24 banner colours, spread around the hue wheel so neighbours differ. */

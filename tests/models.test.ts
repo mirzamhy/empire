@@ -161,7 +161,7 @@ describe("animation clips", () => {
     u.attackAt = 10;
     a.pose(baked, u, 10, 10, pose);
     expect(a.stateOf(1)).toBe("attack");
-    expect(pose[arm]).toBeCloseTo(-1.7, 3);
+    expect(pose[arm]).toBeCloseTo(-0.9, 3); // first key of the spearman stab
     u.attackAt = -9;
     u.moving = true;
     for (let i = 0; i < 30; i++) a.pose(baked, u, 10 + i / 60, 10, pose);

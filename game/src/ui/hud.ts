@@ -110,6 +110,15 @@ export class Hud {
         if (k) this.toast(by ? `⚔️ ${by.name} menghancurkan ${k.name}!` : `💥 Kerajaan ${k.name} runtuh`, "ketik IKUT lagi setelah 60 dtk", by?.color ?? k.color);
         break;
       }
+      case "tower": {
+        const v = s.village(e.id);
+        const tk = s.kingdomById(e.kid);
+        if (tk && v) {
+          this.tick(`🗼 ${tk.name} membangun menara jaga di Desa ${v.name}`, tk.color);
+          this.floatAt(v.x, v.z, "🗼 Menara", tk.color);
+        }
+        break;
+      }
       case "village": {
         const v = s.village(e.id);
         const prev = e.prev ? s.kingdomById(e.prev) : null;

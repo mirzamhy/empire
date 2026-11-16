@@ -158,3 +158,22 @@ export function shield(h: Human, kind: "heater" | "kite" | "round", face: THREE.
   }
   return g;
 }
+
+/** A simple standing crew member (no bones) for siege engines and howdahs. Feet at y = 0 of `parent`. */
+export function crew(parent: THREE.Object3D, tunic: THREE.Material, x: number, y: number, z: number, ry = 0, scale = 1) {
+  const g = new THREE.Group();
+  g.position.set(x, y, z);
+  g.rotation.y = ry;
+  g.scale.setScalar(scale);
+  parent.add(g);
+  const dark = new THREE.MeshLambertMaterial({ color: PAL.leatherDark, flatShading: true });
+  const skin = new THREE.MeshLambertMaterial({ color: PAL.skin, flatShading: true });
+  const iron = new THREE.MeshLambertMaterial({ color: PAL.iron, flatShading: true });
+  part(g, box(0.5, 1.5, 0.34), dark, 0, 0.75, 0); // legs
+  part(g, taperBox(0.6, 0.86, 1.2, 0.4, 0.48), tunic, 0, 2.1, 0);
+  part(g, box(0.2, 0.9, 0.22), dark, -0.55, 2.2, 0.08, -0.5, 0, 0);
+  part(g, box(0.2, 0.9, 0.22), dark, 0.55, 2.2, 0.08, -0.5, 0, 0);
+  part(g, ico(0.27, 0), skin, 0, 3.02, 0);
+  part(g, cyl(0.2, 0.3, 0.22, 7), iron, 0, 3.22, 0);
+  return g;
+}

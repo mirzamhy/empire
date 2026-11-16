@@ -11,6 +11,7 @@ import { bakeUnit, type BakedRig } from "./rig";
 
 const CAPACITY = 420;
 const MAX_BONES = 48;
+const BLOB_CAPACITY = 1600;
 /** Units are drawn larger than their sim footprint so armies read on a phone screen. */
 export const VISUAL_SCALE = 1.7;
 
@@ -47,8 +48,22 @@ export class UnitRenderer {
   private colors = new Map<number, string>();
   private tiers = new Map<number, Tier>();
 
+  /** Soft dark discs under every unit: they anchor units to the ground when the shadow map is too coarse. */
+  private blobs: THREE.InstancedMesh;
+
   constructor(private map: WorldMap) {
     this.material.side = THREE.DoubleSide;
+    const disc = new THREE.CircleGeometry(1, 12).rotateX(-Math.PI / 2);
+    // alpha fades from the centre to the rim through vertex colours (RGBA)
+    const n = disc.getAttribute("position").count;
+    const rgba = new Float32Array(n * 4);
+    for (let i = 0; i < n; i++) rgba[i * 4 + 3] = i === 0 ? 0.42 : 0;
+    disc.setAttribute("color", new THREE.BufferAttribute(rgba, 4));
+    this.blobs = new THREE.InstancedMesh(disc, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), BLOB_CAPACITY);
+    this.blobs.count = 0;
+    this.blobs.frustumCulled = false;
+    this.blobs.renderOrder = 1;
+    this.group.add(this.blobs);
   }
 
   /** Bake every type up front so the first gift does not stall a frame. */
@@ -127,8 +142,16 @@ export class UnitRenderer {
       this.colors.set(k.id, k.color);
       this.tiers.set(k.id, tierOfLevel(k.level));
     }
+    let blobs = 0;
     for (const u of sim.units) {
       if (!u.alive) continue;
+      if (blobs < BLOB_CAPACITY) {
+        // flying units cast a smaller, fainter-looking blob on the ground below them
+        const st = sim.cfg.unitTypes[u.type];
+        const r = VISUAL_SCALE * st.scale * (u.type === "cavalry" || u.type === "dragon" ? 1.5 : u.type === "golem" || u.type === "demon" ? 1.3 : 0.85) * (st.flying ? 0.8 : 1);
+        this.local.makeScale(r, 1, r).setPosition(u.x, this.map.heightAt(u.x, u.z) + 0.07, u.z);
+        this.blobs.setMatrixAt(blobs++, this.local);
+      }
       const tier = this.tiers.get(u.kid) ?? 1;
       const key = u.type + ":" + tier;
       const tm = this.types.get(key) ?? this.ensure(u.type, tier);
@@ -150,6 +173,8 @@ export class UnitRenderer {
       }
     }
     this.animator.endFrame();
+    this.blobs.count = blobs;
+    this.blobs.instanceMatrix.needsUpdate = true;
     for (const [key, tm] of this.types) {
       const n = counts.get(key) ?? 0;
       for (const mesh of tm.meshes) {

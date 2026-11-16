@@ -11,6 +11,7 @@ Game TikTok LIVE perang kerajaan. Penonton ketik `ikut`, dapat kerajaan atas nam
 - [Unit pasukan](notes/unit-pasukan.md) — 10 unit, stat, kemampuan
 - [Peta dan terrain](notes/peta-terrain.md) — layout benua dari gambar referensi
 - [Pemetaan gift](notes/pemetaan-gift.md) — tier gift, like, share, follow, draf config
+- [Langkah selanjutnya](notes/langkah-selanjutnya.md) — status, yang perlu dicek, dan urutan pekerjaan berikutnya
 - [Log keputusan](notes/keputusan.md)
 - [Pertanyaan terbuka](notes/pertanyaan-terbuka.md)
 

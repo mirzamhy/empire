@@ -8,6 +8,7 @@ import { LiveRouter, type RouteResult } from "./live/router";
 import { loadConfig, UNIT_TYPES } from "./sim/config";
 import { WorldMap } from "./sim/map";
 import { Sim } from "./sim/world";
+import { Atmosphere } from "./render/atmosphere";
 import { buildTerrain } from "./render/terrain";
 import { createScene } from "./render/scene";
 import { CastleRenderer } from "./render/castles";
@@ -34,6 +35,12 @@ const fx = new Fx(map);
 view.scene.add(castles.group, villages.group, units.group, fx.group);
 const director = new Director(view.camera, map);
 fx.onShake = (power, x, z) => director.shake(power, x, z);
+// effects that start at a body part (dragon fire from the mouth) ask the unit renderer where it is
+let fxTime = 0;
+fx.socketOf = (id, socket, out) => {
+  const u = sim.units.find((x) => x.id === id && x.alive);
+  return !!u && units.socketWorld(sim, u, socket, fxTime, out);
+};
 const studio = params.has("studio");
 const hud = studio ? null : new Hud(sim, map, view.camera);
 let controls: OrbitControls | null = null;
@@ -159,11 +166,14 @@ function dispatch(now: number) {
 }
 
 // The world is too big for one sharp shadow map: the shadow box follows the camera focus.
-const sunOffset = view.sun.position.clone();
+// The sun's direction and colour come from the atmosphere (mood per round phase).
+const atmosphere = new Atmosphere(view, terrain.cloudShadow);
+if (studio) atmosphere.setVisible(false);
 function followSun() {
   const f = controls ? controls.target : director.focus;
+  const o = atmosphere.sunOffset;
   view.sun.target.position.set(f.x, 0, f.z);
-  view.sun.position.set(f.x + sunOffset.x, sunOffset.y, f.z + sunOffset.z);
+  view.sun.position.set(f.x + o.x, o.y, f.z + o.z);
 }
 
 const perf = params.has("perf") ? new PerfOverlay(view.renderer) : null;
@@ -185,12 +195,15 @@ function frame() {
   }
   terrain.altarCrystal.rotation.y = t * 1.6;
   terrain.water.position.y = -0.25 + Math.sin(t * 1.4) * 0.05;
+  terrain.update(t);
+  if (!studio) atmosphere.update(sim.phase, dt);
   castles.update(sim, t);
   villages.update(sim, t);
   perf?.begin("units");
   units.update(sim, t);
   perf?.end("units");
   perf?.begin("fx");
+  fxTime = t;
   fx.update(sim, t);
   perf?.end("fx");
   director.update(sim, t, dt);
@@ -229,8 +242,11 @@ Object.assign(window, {
       castles.update(sim, now);
       villages.update(sim, now);
       units.update(sim, now);
+      fxTime = now;
       fx.update(sim, now);
       for (let i = 0; i < 60; i++) director.update(sim, now, 0.05);
+      terrain.update(now);
+      if (!studio) atmosphere.update(sim.phase, seconds);
       followSun();
       hud?.update(now);
       view.renderer.render(view.scene, view.camera);

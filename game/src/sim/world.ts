@@ -56,7 +56,7 @@ export interface Unit {
   passive: boolean;
   atkCd: number;
   retarget: number;
-  tKind: "unit" | "castle" | "dragon" | "home" | "village" | null;
+  tKind: "unit" | "castle" | "dragon" | "home" | "village" | "build" | null;
   tId: number;
   heading: number;
   moving: boolean;
@@ -66,6 +66,9 @@ export interface Unit {
   raised: number;
   bornAt: number;
   from: string | null;
+  /** stealth units become targetable after their first attack or the first damage they take */
+  revealed: boolean;
+  trampleCd: number;
 }
 
 /** Neutral settlement. Standing in it alone for a few seconds takes it; it claims land and trains militia. */
@@ -81,6 +84,11 @@ export interface Village {
   progress: number;
   spawnTimer: number;
   field: Uint16Array;
+  /** watchtower built by an Engineer; lost when the village changes hands */
+  tower: boolean;
+  /** seconds of building done */
+  build: number;
+  towerCd: number;
 }
 
 const VILLAGE_NAMES = [
@@ -105,13 +113,14 @@ export type SimEvent =
   | { k: "fall"; kid: number; by: number | null }
   | { k: "troops"; kid: number; units: UnitBundle; from: string; reason: string }
   | { k: "level"; kid: number; level: number }
-  | { k: "shot"; fromX: number; fromZ: number; x: number; z: number; type: UnitType | "tower" | "dragon"; dmg: number; on: HitTarget }
+  | { k: "shot"; fromX: number; fromZ: number; x: number; z: number; type: UnitType | "tower" | "dragon"; dmg: number; on: HitTarget; id?: number }
   /** melee blow landed (ranged hits land when their shot arrives) */
   | { k: "hit"; fromX: number; fromZ: number; x: number; z: number; type: UnitType; dmg: number; on: HitTarget }
   | { k: "death"; x: number; z: number; kid: number; type: UnitType }
   | { k: "dragon"; state: "spawn" | "dead"; by: number | null }
   /** a village changed hands (prev 0 = it was neutral) */
   | { k: "village"; id: number; kid: number; prev: number }
+  | { k: "tower"; id: number; kid: number }
   | { k: "phase"; phase: Phase }
   | { k: "ticker"; text: string; color?: string };
 
@@ -196,6 +205,7 @@ export class Sim {
       out.push({
         id: out.length + 1, name: VILLAGE_NAMES[i % VILLAGE_NAMES.length], x: spot.x, z: spot.z,
         owner: 0, claimKid: 0, progress: 0, spawnTimer: 0, field: this.map.fieldTo(spot.x, spot.z),
+        tower: false, build: 0, towerCd: 0,
       });
     }
     return out;
@@ -594,6 +604,8 @@ export class Sim {
       raised: 0,
       bornAt: this.t,
       from,
+      revealed: false,
+      trampleCd: 0,
     };
     this.units.push(u);
     k.unitCount++;
@@ -752,11 +764,50 @@ export class Sim {
     return !!k && k.alive && !this.shielded(k);
   }
 
+  /** Does a unit type carry a tag? Flying and ranged count as tags. */
+  private hasTag(type: UnitType, tag: string) {
+    const st = this.cfg.unitTypes[type];
+    return (tag === "flying" && !!st.flying) || (tag === "ranged" && !!st.ranged) || !!st.tags?.includes(tag);
+  }
+
+  /** Stealth units cannot be picked as a target until they reveal themselves. */
+  private hidden(u: Unit) {
+    return !u.revealed && !!this.cfg.unitTypes[u.type].stealth;
+  }
+
+  /** Damage multiplier of an attacker type against a unit type, "castle" or "dragon". */
+  private bonusVs(attacker: UnitType, target: UnitType | "castle" | "dragon") {
+    const b = this.cfg.unitTypes[attacker].bonusVs;
+    if (!b) return 1;
+    let m = 1;
+    if (target === "castle" || target === "dragon") m += b[target] ?? 0;
+    else {
+      m += b.unit ?? 0;
+      for (const tag of Object.keys(b)) if (tag !== "unit" && tag !== "castle" && tag !== "dragon" && this.hasTag(target, tag)) m += b[tag];
+    }
+    return Math.max(0.1, m);
+  }
+
+  /** Closest enemy that passes `want` within r of (x, z). */
+  private nearestEnemyWhere(x: number, z: number, r: number, kid: number, want: (o: Unit, d: number) => boolean): Unit | null {
+    let best: Unit | null = null;
+    let bd = r;
+    this.forNear(x, z, r, (o) => {
+      if (!this.isEnemy(o, kid) || this.hidden(o)) return;
+      const d = Math.hypot(o.x - x, o.z - z);
+      if (d < bd && want(o, d)) {
+        bd = d;
+        best = o;
+      }
+    });
+    return best;
+  }
+
   private nearestEnemyUnit(x: number, z: number, r: number, kid: number): Unit | null {
     let best: Unit | null = null;
     let bd = r;
     this.forNear(x, z, r, (o) => {
-      if (!this.isEnemy(o, kid)) return;
+      if (!this.isEnemy(o, kid) || this.hidden(o)) return;
       const d = Math.hypot(o.x - x, o.z - z);
       if (d < bd) {
         bd = d;
@@ -788,11 +839,33 @@ export class Sim {
       }
       return;
     }
-    const near = this.nearestEnemyUnit(u.x, u.z, uc.aggroRange, k.id);
+    const st = this.cfg.unitTypes[u.type];
+    // a shieldbearer nearby draws the attack; hunters look for their favourite prey first
+    const taunter = this.nearestEnemyWhere(u.x, u.z, 6, k.id, (o, d) => d <= (this.cfg.unitTypes[o.type].taunt ?? 0));
+    const prey = !taunter && st.hunts ? this.nearestEnemyWhere(u.x, u.z, uc.aggroRange * 1.5, k.id, (o) => st.hunts!.some((tag) => this.hasTag(o.type, tag))) : null;
+    const near = taunter ?? prey ?? this.nearestEnemyUnit(u.x, u.z, Math.max(uc.aggroRange, st.range), k.id);
     if (near) {
       u.tKind = "unit";
       u.tId = near.id;
       return;
+    }
+    // engineers with nothing to fight go and fortify one of their own villages
+    if (st.builds) {
+      let site: Village | null = null;
+      let sd = this.cfg.villages.buildRange;
+      for (const v of this.villages) {
+        if (v.owner !== k.id || v.tower) continue;
+        const d = Math.hypot(v.x - u.x, v.z - u.z);
+        if (d < sd) {
+          sd = d;
+          site = v;
+        }
+      }
+      if (site) {
+        u.tKind = "build";
+        u.tId = (site as Village).id;
+        return;
+      }
     }
     // expansion: on the "ekspansi" order everyone goes; otherwise small garrisons and a share
     // of the passive troops take villages near home
@@ -881,6 +954,17 @@ export class Sim {
         tx = this.dragon.x;
         tz = this.dragon.z;
         reach = st.range + 3;
+      } else if (u.tKind === "build") {
+        const v = this.village(u.tId);
+        if (!v || v.owner !== k.id || v.tower) {
+          u.retarget = 0;
+          u.tKind = "home";
+        } else {
+          const a = (u.id * 2.39996) % (Math.PI * 2);
+          tx = v.x + Math.cos(a) * 2.2;
+          tz = v.z + Math.sin(a) * 2.2;
+          reach = 0.6;
+        }
       } else if (u.tKind === "village") {
         const v = this.village(u.tId);
         if (!v || v.owner === k.id) {
@@ -895,7 +979,7 @@ export class Sim {
           reach = 0.6;
         }
       }
-      if (u.tKind === "home" || (!tUnit && !tCastle && u.tKind !== "dragon" && u.tKind !== "village")) {
+      if (u.tKind === "home" || (!tUnit && !tCastle && u.tKind !== "dragon" && u.tKind !== "village" && u.tKind !== "build")) {
         // guard ring around own castle
         const a = (u.id * 2.39996) % (Math.PI * 2);
         const ring = 4.5 + (u.id % 3) * 1.2;
@@ -907,17 +991,59 @@ export class Sim {
       if (dist > reach) {
         this.moveUnit(u, k, tx, tz, tCastle, st.speed * dt * this.map.speedFactor(u.x, u.z) * (st.flying ? 1 / this.map.speedFactor(u.x, u.z) : 1), !!st.flying);
         u.moving = true;
+        // trample: a charging elephant hurts and shoves the small ground units in its way
+        if (st.trample && war) {
+          u.trampleCd -= dt;
+          if (u.trampleCd <= 0) {
+            let hit = false;
+            this.forNear(u.x, u.z, 1.9, (o) => {
+              if (!this.isEnemy(o, k.id) || this.hasTag(o.type, "big") || this.hasTag(o.type, "flying") || Math.hypot(o.x - u.x, o.z - u.z) > 1.9) return;
+              hit = true;
+              const d = Math.hypot(o.x - u.x, o.z - u.z) || 1;
+              const px = o.x + ((o.x - u.x) / d) * 1.2;
+              const pz = o.z + ((o.z - u.z) / d) * 1.2;
+              if (this.map.walkable(this.map.cellAt(px, pz))) {
+                o.x = px;
+                o.z = pz;
+              }
+              this.damageUnit(o, st.trample!, k, false, u);
+            });
+            if (hit) {
+              u.trampleCd = 0.8;
+              this.emit({ k: "hit", fromX: u.x, fromZ: u.z, x: u.x, z: u.z, type: u.type, dmg: st.trample, on: "unit" });
+            }
+          }
+        }
       } else {
         u.moving = false;
         if (u.tKind !== "home") u.heading = Math.atan2(tx - u.x, tz - u.z);
-        if (war && u.atkCd <= 0 && (tUnit || tCastle || (u.tKind === "dragon" && this.dragon))) {
+        if (u.tKind === "build" && war) {
+          // hammer away: every engineer on site adds to the tower
+          const v = this.village(u.tId);
+          if (v && v.owner === k.id && !v.tower) {
+            v.build += dt;
+            if (u.atkCd <= 0) {
+              u.atkCd = 0.8;
+              u.attackAt = this.t;
+            }
+            if (v.build >= this.cfg.villages.towerBuildSeconds) {
+              v.tower = true;
+              this.emit({ k: "tower", id: v.id, kid: k.id });
+            }
+          }
+        }
+        const tooClose = !!st.minRange && dist < st.minRange && !!(tUnit || tCastle);
+        if (war && !tooClose && u.atkCd <= 0 && (tUnit || tCastle || (u.tKind === "dragon" && this.dragon))) {
           u.atkCd = this.cfg.units.attackCooldown * (0.9 + this.rng.next() * 0.2);
           u.attackAt = this.t;
           let dmg = u.dmg * (0.9 + this.rng.next() * 0.2);
           if (this.t < k.buffUntil) dmg *= 1.2;
           if (this.hasAura(u, k)) dmg *= 1 + (this.cfg.unitTypes.demon.aura ?? 0);
+          if (st.rage) dmg *= 1 + st.rage * (1 - Math.max(0, u.hp) / u.maxHp);
+          dmg *= this.bonusVs(u.type, tUnit ? tUnit.type : tCastle ? "castle" : "dragon");
+          u.revealed = true;
           const on: HitTarget = tUnit ? "unit" : tCastle ? "castle" : "dragon";
-          if (st.ranged || u.type === "dragon") this.emit({ k: "shot", fromX: u.x, fromZ: u.z, x: tx, z: tz, type: u.type, dmg, on });
+          if (st.ranged || u.type === "dragon") this.emit({ k: "shot", fromX: u.x, fromZ: u.z, x: tx, z: tz, type: u.type, dmg, on, id: u.id });
           else this.emit({ k: "hit", fromX: u.x, fromZ: u.z, x: tx, z: tz, type: u.type, dmg, on });
           if (tUnit) {
             this.damageUnit(tUnit, dmg, k, !!st.ranged, u);
@@ -957,7 +1083,7 @@ export class Sim {
           ? this.altarField
           : u.tKind === "home"
             ? k.field
-            : u.tKind === "village"
+            : u.tKind === "village" || u.tKind === "build"
               ? (this.village(u.tId)?.field ?? null)
               : null;
       const direct = Math.hypot(dx, dz);
@@ -1039,10 +1165,23 @@ export class Sim {
 
   private damageUnit(target: Unit, dmg: number, by: Kingdom, ranged: boolean, attacker?: Unit) {
     if (!target.alive) return false;
-    const resist = ranged ? this.cfg.unitTypes[target.type].arrowResist ?? 0 : 0;
+    const tst = this.cfg.unitTypes[target.type];
+    let resist = ranged ? tst.arrowResist ?? 0 : 0;
+    if (ranged && tst.dodge && target.moving) resist = 1 - (1 - resist) * (1 - tst.dodge);
+    if (ranged) {
+      // a shieldbearer covers the allies standing close to it
+      let cover = 0;
+      this.forNear(target.x, target.z, 4, (o) => {
+        if (o === target || o.kid !== target.kid) return;
+        const os = this.cfg.unitTypes[o.type];
+        if (os.cover && os.cover > cover && Math.hypot(o.x - target.x, o.z - target.z) <= (os.coverRange ?? 3)) cover = os.cover;
+      });
+      resist = 1 - (1 - resist) * (1 - cover);
+    }
     const forest = ranged && this.map.biomeAt(target.x, target.z) === "forest" ? 0.2 : 0;
     target.hp -= dmg * (1 - resist) * (1 - forest);
     target.hitAt = this.t;
+    target.revealed = true;
     if (target.hp > 0) return false;
     target.alive = false;
     const owner = this.kingdomById(target.kid);
@@ -1197,6 +1336,17 @@ export class Sim {
       const k = this.kingdomById(v.owner)!;
       this.claimTiles(k.id, v.x, v.z, vc.claimRadius);
       if (!war) continue;
+      if (v.tower) {
+        v.towerCd -= dt;
+        if (v.towerCd <= 0) {
+          const target = this.nearestEnemyUnit(v.x, v.z, vc.towerRange, k.id);
+          if (target) {
+            v.towerCd = vc.towerCooldown;
+            this.emit({ k: "shot", fromX: v.x, fromZ: v.z, x: target.x, z: target.z, type: "tower", dmg: vc.towerDamage, on: "unit" });
+            this.damageUnit(target, vc.towerDamage, k, true);
+          }
+        }
+      }
       v.spawnTimer += dt;
       if (v.spawnTimer >= vc.spawnEverySeconds) {
         v.spawnTimer = 0;
@@ -1213,6 +1363,8 @@ export class Sim {
     v.claimKid = 0;
     v.progress = 0;
     v.spawnTimer = 0;
+    v.tower = false;
+    v.build = 0;
     this.gainExp(k, this.cfg.villages.captureExp);
     this.emit({ k: "village", id: v.id, kid, prev });
     for (const u of this.units) if (u.kid === kid && u.tKind === "village" && u.tId === v.id) u.retarget = 0;

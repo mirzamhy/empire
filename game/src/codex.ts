@@ -2,7 +2,10 @@
 // config, abilities and where it comes from (passive production, gifts, likes, villages...).
 import * as THREE from "three";
 import { UNIT_DESCRIPTIONS } from "./render/units/proto.js";
-import { modelFor } from "./render/units/rig";
+import { Animator, POSE_STRIDE } from "./render/units/animator";
+import { clipFor } from "./render/units/anims";
+import { bakeModel, modelFor, type BakedRig } from "./render/units/rig";
+import type { Unit } from "./sim/world";
 import { BANNER_COLORS, loadConfig, UNIT_ICON, UNIT_LABEL, UNIT_TYPES, type UnitStats, type UnitType } from "./sim/config";
 import { loadEventsConfig } from "./live/router";
 
@@ -16,10 +19,14 @@ type Tier = "Ringan" | "Menengah" | "Berat" | "Legendaris";
 const tierOf = (hp: number): Tier => (hp >= 1000 ? "Legendaris" : hp >= 500 ? "Berat" : hp >= 200 ? "Menengah" : "Ringan");
 
 function roleOf(t: UnitType, s: UnitStats) {
+  if (s.tags?.includes("siege")) return "Mesin kepung";
   if (s.flying) return "Terbang";
   if (s.heal) return "Pendukung";
   if (s.raise) return "Pemanggil";
   if (s.ranged) return "Jarak jauh";
+  if (s.builds) return "Pembangun";
+  if (s.stealth) return "Pembunuh";
+  if (s.taunt) return "Penahan";
   if (s.speed >= 6) return "Penyerbu cepat";
   if (t === "skeleton") return "Panggilan";
   return "Jarak dekat";
@@ -36,6 +43,17 @@ function abilities(t: UnitType, s: UnitStats): string[] {
   if (s.aura) out.push(`Aura +${Math.round(s.aura * 100)}% damage untuk teman dalam ${s.auraRange} m`);
   const fastest = Math.max(...UNIT_TYPES.filter((u) => !cfg.unitTypes[u].flying).map((u) => cfg.unitTypes[u].speed));
   if (!s.flying && s.speed === fastest) out.push("Unit darat tercepat");
+  const TAG: Record<string, string> = { big: "unit besar", flying: "unit terbang", ranged: "unit jarak jauh", support: "unit pendukung", siege: "mesin kepung", castle: "kastil", dragon: "Naga Dunia", unit: "pasukan" };
+  for (const [tag, v] of Object.entries(s.bonusVs ?? {})) out.push(`${v > 0 ? "+" : ""}${Math.round(v * 100)}% damage ke ${TAG[tag] ?? tag}`);
+  if (s.taunt) out.push(`Memancing serangan: musuh dalam ${s.taunt} m menyerangnya lebih dulu`);
+  if (s.cover) out.push(`Melindungi teman dalam ${s.coverRange} m: -${Math.round(s.cover * 100)}% damage panah dan sihir`);
+  if (s.rage) out.push(`Amuk: damage naik sampai +${Math.round(s.rage * 100)}% saat HP menipis`);
+  if (s.stealth) out.push("Siluman: tidak bisa diincar sampai menyerang atau terkena serangan");
+  if (s.hunts) out.push(`Mengincar ${s.hunts.map((h) => TAG[h] ?? h).join(" dan ")} lebih dulu`);
+  if (s.dodge) out.push(`Lincah: -${Math.round(s.dodge * 100)}% damage panah saat bergerak`);
+  if (s.trample) out.push(`Menginjak: unit kecil di jalurnya kena ${s.trample} damage dan terdorong`);
+  if (s.minRange) out.push(`Tidak bisa menyerang sasaran yang lebih dekat dari ${s.minRange} m`);
+  if (s.builds) out.push(`Membangun menara jaga di desa sendiri (${cfg.villages.towerBuildSeconds} dtk, menara menembak ${cfg.villages.towerDamage} damage)`);
   if (t === "skeleton") out.push("Tidak bisa dibeli, hanya muncul dari Necromancer");
   if (t === "spearman") out.push("Modal awal setiap kerajaan");
   if (!out.length) out.push("Prajurit jarak dekat tanpa kemampuan khusus");
@@ -82,6 +100,14 @@ const MAX = {
 const DESC: Record<string, string> = {
   ...UNIT_DESCRIPTIONS,
   skeleton: "Tulang belulang prajurit yang gugur, dibangkitkan Necromancer. Lemah tapi datang tanpa biaya.",
+  halberdier: "Prajurit berkapak galah. Kaitnya menjatuhkan penunggang dan menahan raksasa.",
+  shieldbearer: "Pembawa perisai menara. Berdiri paling depan, menyerap serangan dan menaungi pemanah di belakangnya.",
+  berserker: "Petarung dua kapak tanpa zirah. Makin terluka, makin ganas.",
+  assassin: "Pembunuh bertudung. Menyelinap melewati barisan depan untuk menghabisi pemanah dan penyihir.",
+  engineer: "Tukang bangun kerajaan. Mengubah desa jadi pos berjaga dengan menara panah.",
+  ballista: "Busur raksasa beroda dengan dua awak. Jangkauannya jauh dan mematikan bagi Naga.",
+  elephant: "Gajah perang dengan menara penombak di punggungnya. Menerjang barisan dan menginjak apa pun yang kecil.",
+  trebuchet: "Pelontar batu raksasa. Menghancurkan kastil dari jauh, tapi tak berdaya bila musuh sudah dekat.",
 };
 
 // ---------------------------------------------------------------- 3D
@@ -159,9 +185,18 @@ let idleSince = 0;
 function showOnStage(t: UnitType, color: string) {
   turntable.clear();
   turntable.rotation.y = 0;
-  const model = buildModel(t, color);
+  const unitModel = modelFor(t, armourTier(state.level), color, "#facc15");
+  const model = unitModel.root;
   turntable.add(model);
   frame(model, stageCam, 0.95);
+  // animation lab: remember each bone's rest transform so clips can be applied on top
+  const baked = bakeModel(t, unitModel);
+  lab.rig = baked;
+  lab.bones = baked.bones.map((b) => {
+    const obj = b.name === "root" ? null : unitModel.bones[b.name] ?? null;
+    return obj ? { obj, pos: obj.position.clone(), quat: obj.quaternion.clone() } : null;
+  });
+  lab.started = clock.elapsedTime;
   const box = new THREE.Box3().setFromObject(model);
   const r = Math.max(box.max.x - box.min.x, box.max.z - box.min.z) * 0.62;
   ground.scale.setScalar(r);
@@ -191,9 +226,78 @@ stage.addEventListener("pointerup", () => {
   idleSince = performance.now();
 });
 
+// ---------------------------------------------------------------- animation lab
+// Plays the game's own clips on the stage model. Deep link: &clip=attack&t=0.1 freezes a frame.
+type LabClip = "idle" | "walk" | "attack";
+const lab = {
+  rig: null as BakedRig | null,
+  bones: [] as ({ obj: THREE.Object3D; pos: THREE.Vector3; quat: THREE.Quaternion } | null)[],
+  clip: "idle" as LabClip,
+  speed: 1,
+  frozen: null as number | null,
+  started: 0,
+  time: 0,
+};
+const labAnimator = new Animator();
+const labPose = new Float32Array(48 * POSE_STRIDE);
+const labQ = new THREE.Quaternion();
+const labE = new THREE.Euler();
+const labV = new THREE.Vector3();
+
+function applyLab(dt: number) {
+  const rig = lab.rig;
+  if (!rig) return;
+  lab.time += dt * lab.speed;
+  const attackLen = clipFor(rig.type, rig.rig, "attack")?.length ?? 0.35;
+  // attack loops: the swing, then a short rest in idle
+  const since = lab.frozen ?? (lab.time - lab.started) % (attackLen + 0.7);
+  const u = { id: 0, moving: lab.clip === "walk", attackAt: lab.clip === "attack" ? lab.time - since : -99 } as Unit;
+  labAnimator.pose(rig, u, lab.frozen !== null && lab.clip !== "attack" ? lab.frozen : lab.time, lab.time, labPose);
+  lab.bones.forEach((b, i) => {
+    if (!b) return;
+    const o = i * POSE_STRIDE;
+    b.obj.quaternion.copy(b.quat).multiply(labQ.setFromEuler(labE.set(labPose[o], labPose[o + 1], labPose[o + 2])));
+    b.obj.position.copy(b.pos).add(labV.set(labPose[o + 3], labPose[o + 4], labPose[o + 5]).applyQuaternion(b.quat));
+  });
+}
+
+const labBar = document.createElement("div");
+labBar.style.cssText = "position:absolute;left:10px;bottom:8px;display:flex;gap:6px;align-items:center";
+const labButtons: [LabClip, string][] = [["idle", "Diam"], ["walk", "Jalan"], ["attack", "Serang"]];
+function paintLab() {
+  labBar.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.clip === lab.clip)));
+}
+for (const [clip, label] of labButtons) {
+  const b = document.createElement("button");
+  b.textContent = label;
+  b.dataset.clip = clip;
+  b.style.cssText = "font:inherit;font-size:11px;padding:3px 9px;border-radius:999px;border:1px solid #2b4250;background:#0f1d26;color:#cfe3ee;cursor:pointer";
+  b.addEventListener("pointerdown", (e) => e.stopPropagation());
+  b.addEventListener("click", () => {
+    lab.clip = clip;
+    lab.frozen = null;
+    lab.started = lab.time;
+    paintLab();
+  });
+  labBar.append(b);
+}
+const labSpeed = document.createElement("select");
+labSpeed.setAttribute("aria-label", "Kecepatan animasi");
+labSpeed.style.cssText = "font:inherit;font-size:11px;padding:2px 4px;border-radius:6px;border:1px solid #2b4250;background:#0f1d26;color:#cfe3ee";
+for (const s of [1, 0.5, 0.2]) labSpeed.add(new Option(s === 1 ? "1x" : s + "x", String(s)));
+labSpeed.addEventListener("pointerdown", (e) => e.stopPropagation());
+labSpeed.addEventListener("change", () => (lab.speed = Number(labSpeed.value)));
+labBar.append(labSpeed);
+stage.append(labBar);
+const labStyle = document.createElement("style");
+labStyle.textContent = '.stage button[aria-pressed="true"]{background:#f5c451 !important;color:#10202a !important;border-color:#f5c451 !important}';
+document.head.append(labStyle);
+paintLab();
+
 const clock = new THREE.Clock();
 function loop() {
   const dt = clock.getDelta();
+  applyLab(dt);
   if (!dragging && !fixedSpin && performance.now() - idleSince > 1200) spin += dt * 0.5;
   turntable.rotation.y = spin;
   stageRenderer.render(stageScene, stageCam);
@@ -371,6 +475,12 @@ if (q.has("level")) {
   level.value = String(state.level);
   document.getElementById("levelOut")!.textContent = `Lv ${state.level}`;
 }
+const qClip = q.get("clip") as LabClip | null;
+if (qClip && ["idle", "walk", "attack"].includes(qClip)) {
+  lab.clip = qClip;
+  if (q.has("t")) lab.frozen = Number(q.get("t")) || 0;
+  paintLab();
+}
 if (q.has("spin")) {
   spin = Number(q.get("spin")) || 0;
   fixedSpin = true;
@@ -380,5 +490,6 @@ resizeStage();
 redrawThumbs();
 select(state.unit);
 turntable.rotation.y = spin;
+applyLab(0);
 stageRenderer.render(stageScene, stageCam);
 loop();

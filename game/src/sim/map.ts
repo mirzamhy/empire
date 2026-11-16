@@ -1,6 +1,7 @@
 // World map: biome grid from the reference image, elevation, walkability, spawn sampling
 // and BFS distance fields used for unit navigation. Pure TS, no rendering.
 import { MAP_H, MAP_ROWS, MAP_W } from "./mapdata";
+import { ridge, smoothstep, vnoise } from "./noise";
 import type { Rng } from "./rng";
 
 export type Biome = "water" | "beach" | "plains" | "desert" | "forest" | "mountain";
@@ -35,19 +36,36 @@ export class WorldMap {
     const distWater = this.bfs((i) => this.biome[i] === "water", () => true);
     const distRock = this.bfs((i) => this.biome[i] !== "mountain", () => true); // depth inside mountains
     const distMtn = this.bfs((i) => this.biome[i] === "mountain", () => true); // distance to nearest mountain
+    const distLand = this.bfs((i) => this.biome[i] !== "water", () => true); // depth of the sea floor
     for (let i = 0; i < n; i++) {
       const b = this.biome[i];
       const x = i % GRID_W;
       const y = (i / GRID_W) | 0;
       const ripple = Math.sin(x * 0.37 + y * 0.11) * 0.18 + Math.cos(y * 0.41 - x * 0.07) * 0.15;
       if (b === "water") {
-        this.height[i] = -1.2;
+        // the sea floor drops away from the shore
+        this.height[i] = -1.2 - Math.min(distLand[i], 9) * 0.55;
         continue;
       }
-      let hgt = Math.min(distWater[i], 8) * 0.12 + ripple;
-      if (b === "beach") hgt = 0.15 + ripple * 0.3;
-      if (b === "mountain") hgt += 1.2 + Math.min(distRock[i], 6) * 1.05 + Math.abs(Math.sin(x * 0.9) * Math.cos(y * 0.7)) * 1.4;
+      if (b === "beach") {
+        this.height[i] = 0.15 + ripple * 0.3;
+        continue;
+      }
+      // lowlands: a gentle rise inland plus rolling hills that flatten toward the coast
+      const inland = smoothstep(2, 10, distWater[i]);
+      let hgt = Math.min(distWater[i], 8) * 0.14 + ripple;
+      hgt += (vnoise(x / 22, y / 22) * 2.6 + vnoise(x / 8 + 40, y / 8) * 0.8) * inland;
+      if (b === "desert") hgt += ridge(x / 9 + y / 30, y / 14) * 1.1 * inland; // dunes
       if (b === "forest") hgt += 0.15;
+      // foothills: the land swells as it nears a mountain
+      if (b !== "mountain") hgt += (1 - smoothstep(0, 7, distMtn[i])) ** 2 * 3.2;
+      if (b === "mountain") {
+        // mountains: a tall core that grows with the depth inside the range, cut by sharp ridges
+        const core = smoothstep(0, 13, distRock[i]);
+        hgt += 3.2 + 24 * core ** 1.1;
+        hgt += ridge(x / 13, y / 13) * 9 * (0.25 + core) + ridge(x / 5 + 17, y / 5) * 2.2 * (0.3 + core);
+        hgt += vnoise(x / 2.5, y / 2.5) * 1.2;
+      }
       this.height[i] = hgt;
     }
 

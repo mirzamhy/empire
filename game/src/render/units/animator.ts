@@ -4,7 +4,7 @@
 // V0 states: idle, walk (blended over ~0.1 s) and attack (overlay on the bones its clip names).
 // V2 adds spawn, run, hit, death and cheer on top of the same records.
 import type { Unit } from "../../sim/world";
-import { CLIPS, sampleKeys, type Clip } from "./anims";
+import { clipFor, sampleKeys, type Clip, type ClipName } from "./anims";
 import type { BakedRig } from "./rig";
 
 export type AnimStateName = "idle" | "walk" | "attack";
@@ -49,7 +49,8 @@ export class Animator {
     s.walk += ((u.moving ? 1 : 0) - s.walk) * Math.min(1, dt * 12);
 
     const since = simT - u.attackAt;
-    const next: AnimStateName = since >= 0 && since < ATTACK_SECONDS ? "attack" : u.moving ? "walk" : "idle";
+    const len = clipFor(rig.type, rig.rig, "attack")?.length ?? ATTACK_SECONDS;
+    const next: AnimStateName = since >= 0 && since < len ? "attack" : u.moving ? "walk" : "idle";
     if (next !== s.state) {
       s.state = next;
       s.since = time;
@@ -63,16 +64,26 @@ export class Animator {
   }
 
   private compute(rig: BakedRig, u: Unit, time: number, simT: number, walk: number, out: Float32Array) {
-    const clips = CLIPS[rig.rig];
+    const clip = (name: ClipName) => clipFor(rig.type, rig.rig, name);
     const t = time + u.id * 0.37;
     const since = simT - u.attackAt;
     out.fill(0, 0, rig.bones.length * POSE_STRIDE);
-    if (clips.fly) this.apply(rig, clips.fly, t, 1, out);
+    const fly = clip("fly");
+    if (fly) this.apply(rig, fly, t, 1, out);
     else {
-      if (clips.idle && walk < 0.999) this.apply(rig, clips.idle, t, 1, out);
-      if (clips.walk && walk > 0.001) this.apply(rig, clips.walk, t, walk, out);
+      const idle = clip("idle");
+      const walkClip = clip("walk");
+      if (idle && walk < 0.999) this.apply(rig, idle, t, 1, out);
+      if (walkClip && walk > 0.001) this.apply(rig, walkClip, t, walk, out);
     }
-    if (since >= 0 && since < ATTACK_SECONDS && clips.attack) this.apply(rig, clips.attack, since, 1, out);
+    const ambient = clip("ambient");
+    if (ambient) this.apply(rig, ambient, t, 1, out);
+    const attack = clip("attack");
+    if (attack && since >= 0 && since < attack.length) {
+      // fade out over the last quarter so the pose melts back into idle or walk
+      const w = Math.min(1, (attack.length - since) / (attack.length * 0.25));
+      this.apply(rig, attack, since, w, out);
+    }
   }
 
   /** Blend a clip into the pose with weight w (bones the clip does not name are left alone). */

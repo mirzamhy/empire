@@ -17,6 +17,8 @@ interface VillageView {
   flag: THREE.Mesh;
   claim: THREE.Mesh;
   ring: THREE.Mesh;
+  /** watchtower built by engineers; scaled up while under construction */
+  tower: THREE.Group;
   owner: number;
 }
 
@@ -86,8 +88,26 @@ export class VillageRenderer {
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.15;
     g.add(ring);
+    // watchtower: stone base, wooden platform, pointed roof
+    const tower = new THREE.Group();
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.95, 3.2, 6), STONE);
+    base.position.y = 1.6;
+    const deck = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.0, 0.5, 6), WOOD);
+    deck.position.y = 3.4;
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(1.25, 1.3, 6), ROOFS[v.id % ROOFS.length]);
+    roof.position.y = 4.9;
+    for (let i = 0; i < 6; i++) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.75, 0.1), WOOD);
+      post.position.set(Math.cos((i * Math.PI) / 3) * 1.0, 3.95, Math.sin((i * Math.PI) / 3) * 1.0);
+      tower.add(post);
+    }
+    tower.add(base, deck, roof);
+    tower.traverse((o) => (o.castShadow = true));
+    tower.position.set(-1.6, 0, 1.4);
+    tower.visible = false;
+    g.add(tower);
     this.onPlaced(v.x, v.z);
-    return { group: g, flag, claim, ring, owner: -1 };
+    return { group: g, flag, claim, ring, tower, owner: -1 };
   }
 
   update(sim: Sim, time: number) {
@@ -108,6 +128,9 @@ export class VillageRenderer {
         (view.ring.material as THREE.MeshBasicMaterial).color.copy(this.c);
         (view.ring.material as THREE.MeshBasicMaterial).opacity = k ? 0.8 : 0.5;
       }
+      const built = v.tower ? 1 : Math.min(1, v.build / sim.cfg.villages.towerBuildSeconds);
+      view.tower.visible = built > 0.02;
+      view.tower.scale.set(1, Math.max(0.05, built), 1);
       const wave = Math.sin(time * 3 + v.id) * 0.25;
       view.flag.rotation.y = wave;
       // attacker's flag climbs the pole as the capture progresses
