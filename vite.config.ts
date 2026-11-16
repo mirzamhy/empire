@@ -16,5 +16,11 @@ export default defineConfig({
     outDir: fileURLToPath(new URL("./dist/game", import.meta.url)),
     emptyOutDir: true,
     chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL("./game/index.html", import.meta.url)),
+        units: fileURLToPath(new URL("./game/units.html", import.meta.url)),
+      },
+    },
   },
 });

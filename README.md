@@ -14,6 +14,7 @@ npm run dev
 
 - Game: http://127.0.0.1:5200/ (OBS Browser Source, 1080x1920)
 - Admin: http://127.0.0.1:8788/admin (DEMO viewer simulator, round controls, kill switch, TikTok connect)
+- Troop codex: http://127.0.0.1:5200/units.html (3D models, stats per castle level, abilities, how to get each unit)
 
 Connect a real LIVE: set `LIVE_SOURCE=tiktok` and `TIKTOK_USERNAME=<handle>` in `.env` (see `.env.example`), or use the admin panel. The TikTok connector is the unofficial `tiktok-live-connector` package.
 
