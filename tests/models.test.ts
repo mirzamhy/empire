@@ -81,7 +81,7 @@ const files = (import.meta as unknown as { glob: (p: string, o: object) => Recor
   "../game/src/render/units/models/*.ts",
   { eager: true },
 );
-const modelFiles = Object.entries(files).filter(([p]) => !/\/(index|kit)\.ts$/.test(p));
+const modelFiles = Object.entries(files).filter(([p]) => !/\/(index|kit[\w-]*)\.ts$/.test(p));
 
 describe("model files in models/", () => {
   it("has the reference model", () => {

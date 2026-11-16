@@ -4,7 +4,7 @@ import * as THREE from "three";
 import type { WorldMap } from "../sim/map";
 import type { HitTarget, Sim, SimEvent } from "../sim/world";
 import type { UnitType } from "../sim/config";
-import { buildReferenceSoldier } from "./units/proto.js";
+import { modelFor } from "./units/rig";
 
 type ShotType = UnitType | "tower" | "dragon";
 
@@ -392,8 +392,10 @@ export class Fx {
       this.rings.mesh, this.scorch.mesh, this.pillarMesh, this.rubbleMesh, this.numbers.mesh,
     );
 
-    this.dragon = buildReferenceSoldier("dragon", "#b91c1c", "#facc15");
-    this.dragonLimbs = (this.dragon.userData as { limbs: { rightArm?: THREE.Object3D; leftArm?: THREE.Object3D } }).limbs;
+    // World Dragon: the unit model at its top tier, gold where units carry the kingdom colour
+    const dragonModel = modelFor("dragon", 3, "#d4a017", "#facc15");
+    this.dragon = dragonModel.root;
+    this.dragonLimbs = { rightArm: dragonModel.bones.wingR, leftArm: dragonModel.bones.wingL };
     this.dragon.scale.setScalar(2.6);
     this.dragon.visible = false;
     this.group.add(this.dragon);

@@ -209,9 +209,9 @@ const TINT = "#" + TINT_MARKER.toString(16).padStart(6, "0");
 const CREST = "#e8e2d0";
 
 /** The model for a type: a registered Fable model when there is one, else the prototype. */
-export function modelFor(type: UnitType, tier: 1 | 2 | 3 = 1): UnitModel {
+export function modelFor(type: UnitType, tier: 1 | 2 | 3 = 1, tint = TINT, crest = CREST): UnitModel {
   const build = MODELS[type];
-  return build ? build({ tier, tint: TINT, crest: CREST }) : prototypeModel(type, TINT, CREST);
+  return build ? build({ tier, tint, crest }) : prototypeModel(type, tint, crest);
 }
 
 export function bakeUnit(type: UnitType, tier: 1 | 2 | 3 = 1): BakedRig {

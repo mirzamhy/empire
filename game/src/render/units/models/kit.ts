@@ -18,8 +18,8 @@ export function glow(hex: number | string): THREE.MeshBasicMaterial {
 }
 
 /** Kingdom-colour part: painted #ff00ff here, replaced by the kingdom colour in game. */
-export function tintMat(): THREE.MeshLambertMaterial {
-  const m = lambert(0xff00ff);
+export function tintMat(hex: number | string = 0xff00ff): THREE.MeshLambertMaterial {
+  const m = lambert(hex);
   m.userData.tint = true;
   return m;
 }
@@ -68,6 +68,45 @@ export const cyl = (rTop: number, rBottom: number, h: number, sides = 6) => new 
 export const cone = (r: number, h: number, sides = 6) => new THREE.ConeGeometry(r, h, sides, 1);
 /** Low-poly sphere (icosahedron, detail 0 = 20 triangles, 1 = 80). */
 export const ico = (r: number, detail = 0) => new THREE.IcosahedronGeometry(r, detail);
+
+/** Box whose top and bottom faces have different sizes (torsos, shields, blades, snouts). */
+export function taperBox(wBottom: number, wTop: number, h: number, dBottom: number, dTop = dBottom): THREE.BufferGeometry {
+  const g = new THREE.BoxGeometry(1, h, 1);
+  const p = g.getAttribute("position");
+  for (let i = 0; i < p.count; i++) {
+    const top = p.getY(i) > 0;
+    p.setX(i, p.getX(i) * (top ? wTop : wBottom));
+    p.setZ(i, p.getZ(i) * (top ? dTop : dBottom));
+  }
+  return g;
+}
+
+/** Flat ring (halo, hoops). */
+export const ring = (r: number, tube: number, sides = 10) => new THREE.TorusGeometry(r, tube, 4, sides);
+
+/** Free-form triangles from points [[x,y,z],...] and index triples. Used for wing membranes and cloth. */
+export function sheet(points: number[][], faces: number[][]): THREE.BufferGeometry {
+  const pos: number[] = [];
+  for (const f of faces) for (const i of f) pos.push(points[i][0], points[i][1], points[i][2]);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+const UP = new THREE.Vector3(0, 1, 0);
+/** A tapered limb from point a to point b (radius ra at a, rb at b). Horns, bones, bows, tails. */
+export function seg(parent: THREE.Object3D, mat: THREE.Material, a: number[], b: number[], ra: number, rb = ra, sides = 5): THREE.Mesh {
+  const va = new THREE.Vector3(a[0], a[1], a[2]);
+  const vb = new THREE.Vector3(b[0], b[1], b[2]);
+  const dir = vb.clone().sub(va);
+  const len = dir.length();
+  const m = new THREE.Mesh(rb > 0.001 ? new THREE.CylinderGeometry(rb, ra, len, sides, 1) : new THREE.ConeGeometry(ra, len, sides, 1), mat);
+  m.position.copy(va).addScaledVector(dir, 0.5);
+  m.quaternion.setFromUnitVectors(UP, dir.normalize());
+  parent.add(m);
+  return m;
+}
 
 /** Collect bones and sockets into a UnitModel and fill in meta (tris, height). */
 export function finishModel(

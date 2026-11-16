@@ -20,13 +20,17 @@ interface TypeMeshes {
   meshes: (THREE.InstancedMesh | null)[];
 }
 
-const SKELETON = new THREE.Color(0xd8d2c0);
+/** Armour tier of a kingdom level: 1 = level 1-4, 2 = 5-7, 3 = 8 and up. */
+export const tierOfLevel = (level: number): 1 | 2 | 3 => (level >= 8 ? 3 : level >= 5 ? 2 : 1);
+type Tier = 1 | 2 | 3;
+const TIERS: Tier[] = [1, 2, 3];
 const FLASH = new THREE.Color(0xffffff);
 
 export class UnitRenderer {
   readonly group = new THREE.Group();
   readonly animator = new Animator();
-  private types = new Map<UnitType, TypeMeshes>();
+  /** meshes per "type:tier" */
+  private types = new Map<string, TypeMeshes>();
   private material = instancedMaterial();
   private root = new THREE.Matrix4();
   private local = new THREE.Matrix4();
@@ -39,8 +43,9 @@ export class UnitRenderer {
   private scl = new THREE.Vector3();
   private col = new THREE.Color();
   private up = new THREE.Vector3(0, 1, 0);
-  private counts = new Map<UnitType, number>();
+  private counts = new Map<string, number>();
   private colors = new Map<number, string>();
+  private tiers = new Map<number, Tier>();
 
   constructor(private map: WorldMap) {
     this.material.side = THREE.DoubleSide;
@@ -48,7 +53,7 @@ export class UnitRenderer {
 
   /** Bake every type up front so the first gift does not stall a frame. */
   warmup() {
-    for (const t of UNIT_TYPES) this.ensure(t);
+    for (const t of UNIT_TYPES) for (const tier of TIERS) this.ensure(t, tier);
   }
 
   triangles(type: UnitType) {
@@ -59,10 +64,11 @@ export class UnitRenderer {
     return this.ensure(type).baked;
   }
 
-  private ensure(type: UnitType): TypeMeshes {
-    let tm = this.types.get(type);
+  private ensure(type: UnitType, tier: Tier = 1): TypeMeshes {
+    const key = type + ":" + tier;
+    let tm = this.types.get(key);
     if (tm) return tm;
-    const baked = bakeUnit(type);
+    const baked = bakeUnit(type, tier);
     tm = { baked, meshes: [] };
     for (const bone of baked.bones) {
       if (!bone.geometry) {
@@ -70,7 +76,7 @@ export class UnitRenderer {
         continue;
       }
       const mesh = new THREE.InstancedMesh(bone.geometry, this.material, CAPACITY);
-      mesh.name = `${type}:${bone.name}`;
+      mesh.name = `${key}:${bone.name}`;
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.setColorAt(0, new THREE.Color(1, 1, 1));
       mesh.count = 0;
@@ -79,7 +85,7 @@ export class UnitRenderer {
       this.group.add(mesh);
       tm.meshes.push(mesh);
     }
-    this.types.set(type, tm);
+    this.types.set(key, tm);
     return tm;
   }
 
@@ -116,18 +122,23 @@ export class UnitRenderer {
     const counts = this.counts;
     counts.clear();
     this.colors.clear();
-    for (const k of sim.kingdoms) this.colors.set(k.id, k.color);
+    this.tiers.clear();
+    for (const k of sim.kingdoms) {
+      this.colors.set(k.id, k.color);
+      this.tiers.set(k.id, tierOfLevel(k.level));
+    }
     for (const u of sim.units) {
       if (!u.alive) continue;
-      const tm = this.ensure(u.type);
-      const i = counts.get(u.type) ?? 0;
+      const tier = this.tiers.get(u.kid) ?? 1;
+      const key = u.type + ":" + tier;
+      const tm = this.types.get(key) ?? this.ensure(u.type, tier);
+      const i = counts.get(key) ?? 0;
       if (i >= CAPACITY) continue;
-      counts.set(u.type, i + 1);
+      counts.set(key, i + 1);
       this.rootMatrix(sim, u, time, this.root);
       this.animator.pose(tm.baked, u, time, sim.t, this.pose);
       this.chain(tm.baked, this.root);
       this.col.set(this.colors.get(u.kid) ?? "#ffffff");
-      if (u.type === "skeleton") this.col.lerp(SKELETON, 0.55);
       // white flash for a moment after taking damage
       const hurt = sim.t - u.hitAt;
       if (hurt >= 0 && hurt < 0.14) this.col.lerp(FLASH, 0.75 * (1 - hurt / 0.14));
@@ -139,8 +150,8 @@ export class UnitRenderer {
       }
     }
     this.animator.endFrame();
-    for (const [type, tm] of this.types) {
-      const n = counts.get(type) ?? 0;
+    for (const [key, tm] of this.types) {
+      const n = counts.get(key) ?? 0;
       for (const mesh of tm.meshes) {
         if (!mesh) continue;
         mesh.count = n;
@@ -155,7 +166,7 @@ export class UnitRenderer {
    * Returns false when the unit's model has no such socket.
    */
   socketWorld(sim: Sim, u: Unit, name: SocketName, time: number, out: THREE.Vector3): boolean {
-    const tm = this.ensure(u.type);
+    const tm = this.ensure(u.type, this.tiers.get(u.kid) ?? tierOfLevel(sim.kingdomById(u.kid)?.level ?? 1));
     const s = tm.baked.sockets[name];
     if (!s) return false;
     this.rootMatrix(sim, u, time, this.root);

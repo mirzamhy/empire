@@ -20,7 +20,7 @@ export function build(opts: ModelOpts): UnitModel {
   const skin = lambert(0xd9a77a);
   const wood = lambert(0x6b4a2b);
   const trim = lambert(opts.crest);
-  const tint = tintMat();
+  const tint = tintMat(opts.tint);
   const rune = glow(0xffd36a);
 
   // hips: root of the skeleton, centred 1.75 above the ground

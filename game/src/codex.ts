@@ -1,7 +1,8 @@
 // Troop codex page (units.html): every unit type with its real 3D model, stats from the game
 // config, abilities and where it comes from (passive production, gifts, likes, villages...).
 import * as THREE from "three";
-import { buildReferenceSoldier, UNIT_DESCRIPTIONS } from "./render/units/proto.js";
+import { UNIT_DESCRIPTIONS } from "./render/units/proto.js";
+import { modelFor } from "./render/units/rig";
 import { BANNER_COLORS, loadConfig, UNIT_ICON, UNIT_LABEL, UNIT_TYPES, type UnitStats, type UnitType } from "./sim/config";
 import { loadEventsConfig } from "./live/router";
 
@@ -85,10 +86,11 @@ const DESC: Record<string, string> = {
 
 // ---------------------------------------------------------------- 3D
 
-/** Models use the same builder as the game. Skeletons reuse the necromancer body in bone colour. */
+const armourTier = (level: number): 1 | 2 | 3 => (level >= 8 ? 3 : level >= 5 ? 2 : 1);
+
+/** Same models as the game (Fable models where registered), at the tier of the chosen castle level. */
 function buildModel(t: UnitType, color: string) {
-  if (t === "skeleton") return buildReferenceSoldier("necromancer", "#d8d2c0", "#e8e2d0");
-  return buildReferenceSoldier(t, color, "#facc15");
+  return modelFor(t, armourTier(state.level), color, "#facc15").root;
 }
 
 function lights(scene: THREE.Scene) {
@@ -150,6 +152,7 @@ const turntable = new THREE.Group();
 stageScene.add(turntable);
 let spin = 0;
 let dragging = false;
+let fixedSpin = false;
 let lastX = 0;
 let idleSince = 0;
 
@@ -191,7 +194,7 @@ stage.addEventListener("pointerup", () => {
 const clock = new THREE.Clock();
 function loop() {
   const dt = clock.getDelta();
-  if (!dragging && performance.now() - idleSince > 1200) spin += dt * 0.5;
+  if (!dragging && !fixedSpin && performance.now() - idleSince > 1200) spin += dt * 0.5;
   turntable.rotation.y = spin;
   stageRenderer.render(stageScene, stageCam);
   requestAnimationFrame(loop);
@@ -347,14 +350,35 @@ for (const color of BANNER_COLORS.slice(0, 12)) {
 const level = document.getElementById("level") as HTMLInputElement;
 level.max = String(ec.maxLevel);
 level.addEventListener("input", () => {
+  const before = armourTier(state.level);
   state.level = Number(level.value);
+  if (armourTier(state.level) !== before) {
+    redrawThumbs();
+    showOnStage(state.unit, state.color);
+  }
   document.getElementById("levelOut")!.textContent = `Lv ${state.level}`;
   renderDetail();
   renderMini();
   renderTable();
 });
 
+// deep links: units.html?unit=dragon&level=8&spin=1.6 (spin in radians stops the turntable)
+const q = new URLSearchParams(location.search);
+const qUnit = q.get("unit") as UnitType | null;
+if (qUnit && UNIT_TYPES.includes(qUnit)) state.unit = qUnit;
+if (q.has("level")) {
+  state.level = Math.min(ec.maxLevel, Math.max(1, Number(q.get("level")) || 1));
+  level.value = String(state.level);
+  document.getElementById("levelOut")!.textContent = `Lv ${state.level}`;
+}
+if (q.has("spin")) {
+  spin = Number(q.get("spin")) || 0;
+  fixedSpin = true;
+}
+
 resizeStage();
 redrawThumbs();
 select(state.unit);
+turntable.rotation.y = spin;
+stageRenderer.render(stageScene, stageCam);
 loop();
