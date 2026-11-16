@@ -10,6 +10,8 @@ interface CastleView {
   shield: THREE.Mesh;
   crown: boolean;
   fallingSince: number;
+  lastHp: number;
+  hitAt: number;
 }
 
 export class CastleRenderer {
@@ -54,7 +56,14 @@ export class CastleRenderer {
           this.views.delete(k.id);
         }
       } else {
-        // hit shake when the castle is losing hp fast is handled by fx; here only a gentle banner wave
+        // squash when hit, then the banner wave
+        if (k.hp < v.lastHp - 0.5) v.hitAt = time;
+        v.lastHp = k.hp;
+        const h = time - v.hitAt;
+        const squash = h >= 0 && h < 0.18 ? Math.sin((h / 0.18) * Math.PI) * 0.035 : 0;
+        const base = 1 + Math.min(v.level, 10) * 0.07; // same as buildCastle
+        v.group.scale.set(base * (1 + squash), base * (1 - squash), base * (1 + squash));
+        v.group.rotation.z = squash * Math.sin(time * 60) * 0.6;
         v.group.children.forEach((c) => {
           if (c.userData.banner) c.rotation.y = Math.sin(time * 2 + k.id) * 0.4;
         });
@@ -75,6 +84,6 @@ export class CastleRenderer {
       c.position.y = 6.2;
       group.add(c);
     }
-    return { group, level, shield, crown, fallingSince: -1 };
+    return { group, level, shield, crown, fallingSince: -1, lastHp: Infinity, hitAt: -9 };
   }
 }

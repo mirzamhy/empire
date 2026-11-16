@@ -23,6 +23,9 @@ export class Director {
   private target = new THREE.Vector3();
   private desired = new THREE.Vector3();
   private look = new THREE.Vector3();
+  /** smoothed camera position before shake is added */
+  private base = new THREE.Vector3();
+  private trauma = 0;
   enabled = true;
 
   constructor(
@@ -30,6 +33,14 @@ export class Director {
     private map: WorldMap,
   ) {
     this.look.set(0, 0, 0);
+    this.base.copy(camera.position);
+  }
+
+  /** Screen shake for big impacts; fades with distance from what the camera is looking at. */
+  shake(power: number, x: number, z: number) {
+    const d = Math.hypot(x - this.look.x, z - this.look.z);
+    const near = Math.max(0, 1 - d / 60);
+    this.trauma = Math.min(1, this.trauma + power * near);
   }
 
   private propose(s: Omit<Shot, "until"> & { seconds: number }, now: number) {
@@ -96,9 +107,20 @@ export class Director {
     const d = s.dist;
     this.desired.set(s.x, this.target.y + d * 0.95, s.z + d * 0.62);
     const k = 1 - Math.exp(-dt * (s.label === "overview" ? 1.2 : 2.2));
-    this.camera.position.lerp(this.desired, k);
+    this.base.lerp(this.desired, k);
     this.look.lerp(this.target, 1 - Math.exp(-dt * 3));
+    this.camera.position.copy(this.base);
     this.camera.lookAt(this.look);
+    if (this.trauma > 0.001) {
+      // trauma squared feels better than linear: small hits barely move, castle falls rattle
+      const a = this.trauma * this.trauma * 0.9;
+      const t = now * 38;
+      this.camera.position.x += Math.sin(t * 1.1) * a;
+      this.camera.position.y += Math.sin(t * 1.7 + 1) * a * 0.6;
+      this.camera.position.z += Math.sin(t * 1.3 + 2) * a;
+      this.camera.rotateZ(Math.sin(t * 0.9 + 3) * a * 0.012);
+      this.trauma = Math.max(0, this.trauma - dt * 1.6);
+    }
   }
 
   /** Point the camera is looking at (the shadow box follows it). */

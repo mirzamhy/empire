@@ -59,6 +59,8 @@ export interface Unit {
   heading: number;
   moving: boolean;
   attackAt: number;
+  /** sim time of the last damage taken (render hit flash) */
+  hitAt: number;
   raised: number;
   bornAt: number;
   from: string | null;
@@ -80,11 +82,15 @@ export type SimEvent =
   | { k: "fall"; kid: number; by: number | null }
   | { k: "troops"; kid: number; units: UnitBundle; from: string; reason: string }
   | { k: "level"; kid: number; level: number }
-  | { k: "shot"; fromX: number; fromZ: number; x: number; z: number; type: UnitType | "tower" | "dragon" }
+  | { k: "shot"; fromX: number; fromZ: number; x: number; z: number; type: UnitType | "tower" | "dragon"; dmg: number; on: HitTarget }
+  /** melee blow landed (ranged hits land when their shot arrives) */
+  | { k: "hit"; fromX: number; fromZ: number; x: number; z: number; type: UnitType; dmg: number; on: HitTarget }
   | { k: "death"; x: number; z: number; kid: number; type: UnitType }
   | { k: "dragon"; state: "spawn" | "dead"; by: number | null }
   | { k: "phase"; phase: Phase }
   | { k: "ticker"; text: string; color?: string };
+
+export type HitTarget = "unit" | "castle" | "dragon";
 
 export interface JoinResult {
   status: "joined" | "exists" | "queued" | "cooldown" | "next_round";
@@ -523,6 +529,7 @@ export class Sim {
       heading: a,
       moving: false,
       attackAt: -9,
+      hitAt: -9,
       raised: 0,
       bornAt: this.t,
       from,
@@ -570,8 +577,9 @@ export class Sim {
         const target = this.nearestEnemyUnit(k.x, k.z, kc.towerRange + k.level * 0.3, k.id);
         if (target) {
           k.towerCd = kc.towerCooldown;
-          this.emit({ k: "shot", fromX: k.x, fromZ: k.z, x: target.x, z: target.z, type: "tower" });
-          this.damageUnit(target, kc.towerDamage + kc.towerDamagePerLevel * k.level, k, true);
+          const tdmg = kc.towerDamage + kc.towerDamagePerLevel * k.level;
+          this.emit({ k: "shot", fromX: k.x, fromZ: k.z, x: target.x, z: target.z, type: "tower", dmg: tdmg, on: "unit" });
+          this.damageUnit(target, tdmg, k, true);
         }
       }
       // war target
@@ -797,7 +805,9 @@ export class Sim {
           let dmg = u.dmg * (0.9 + this.rng.next() * 0.2);
           if (this.t < k.buffUntil) dmg *= 1.2;
           if (this.hasAura(u, k)) dmg *= 1 + (this.cfg.unitTypes.demon.aura ?? 0);
-          if (st.ranged || u.type === "dragon") this.emit({ k: "shot", fromX: u.x, fromZ: u.z, x: tx, z: tz, type: u.type });
+          const on: HitTarget = tUnit ? "unit" : tCastle ? "castle" : "dragon";
+          if (st.ranged || u.type === "dragon") this.emit({ k: "shot", fromX: u.x, fromZ: u.z, x: tx, z: tz, type: u.type, dmg, on });
+          else this.emit({ k: "hit", fromX: u.x, fromZ: u.z, x: tx, z: tz, type: u.type, dmg, on });
           if (tUnit) {
             this.damageUnit(tUnit, dmg, k, !!st.ranged, u);
             if (st.splash) this.forNear(tUnit.x, tUnit.z, st.splash, (o) => o !== tUnit && this.isEnemy(o, k.id) && this.damageUnit(o, dmg * 0.5, k, true, u));
@@ -913,6 +923,7 @@ export class Sim {
     const resist = ranged ? this.cfg.unitTypes[target.type].arrowResist ?? 0 : 0;
     const forest = ranged && this.map.biomeAt(target.x, target.z) === "forest" ? 0.2 : 0;
     target.hp -= dmg * (1 - resist) * (1 - forest);
+    target.hitAt = this.t;
     if (target.hp > 0) return false;
     target.alive = false;
     const owner = this.kingdomById(target.kid);
@@ -971,10 +982,11 @@ export class Sim {
     const t: Unit = target;
     d.cd = dc.cooldown;
     d.attackAt = this.t;
-    this.emit({ k: "shot", fromX: d.x, fromZ: d.z, x: t.x, z: t.z, type: "dragon" });
+    this.emit({ k: "shot", fromX: d.x, fromZ: d.z, x: t.x, z: t.z, type: "dragon", dmg: dc.dmg, on: "unit" });
     this.forNear(t.x, t.z, dc.splash, (o) => {
       if (Math.hypot(o.x - t.x, o.z - t.z) > dc.splash) return;
       o.hp -= dc.dmg;
+      o.hitAt = this.t;
       if (o.hp <= 0 && o.alive) {
         o.alive = false;
         const owner = this.kingdomById(o.kid);

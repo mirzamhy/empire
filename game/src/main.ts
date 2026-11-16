@@ -30,6 +30,7 @@ units.warmup();
 const fx = new Fx(map);
 view.scene.add(castles.group, units.group, fx.group);
 const director = new Director(view.camera, map);
+fx.onShake = (power, x, z) => director.shake(power, x, z);
 const studio = params.has("studio");
 const hud = studio ? null : new Hud(sim, map, view.camera);
 let controls: OrbitControls | null = null;
@@ -134,7 +135,7 @@ function paintTerritory() {
 function dispatch(now: number) {
   for (const e of sim.drainEvents()) {
     hud?.onEvent(e);
-    fx.onEvent(e, now);
+    fx.onEvent(e, now, sim);
     director.onEvent(e, sim, now);
   }
 }

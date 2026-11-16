@@ -15,6 +15,9 @@ interface TypeMeshes {
   meshes: { name: string; pivot: THREE.Matrix4; mesh: THREE.InstancedMesh }[];
 }
 
+const SKELETON = new THREE.Color(0xd8d2c0);
+const FLASH = new THREE.Color(0xffffff);
+
 export class UnitRenderer {
   readonly group = new THREE.Group();
   private types = new Map<UnitType, TypeMeshes>();
@@ -84,7 +87,10 @@ export class UnitRenderer {
       const since = sim.t - u.attackAt;
       const attack = since >= 0 && since < 0.35 ? since / 0.35 : -1;
       this.col.set(colors.get(u.kid) ?? "#ffffff");
-      if (u.type === "skeleton") this.col.lerp(new THREE.Color(0xd8d2c0), 0.55);
+      if (u.type === "skeleton") this.col.lerp(SKELETON, 0.55);
+      // white flash for a moment after taking damage
+      const hurt = sim.t - u.hitAt;
+      if (hurt >= 0 && hurt < 0.14) this.col.lerp(FLASH, 0.75 * (1 - hurt / 0.14));
       for (const part of tm.meshes) {
         if (part.name === "body") part.mesh.setMatrixAt(i, this.m);
         else {
