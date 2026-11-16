@@ -395,6 +395,8 @@ Game `5200`, bridge `8788` (5190/8787 dipakai DEADZONE, 5195–5198 proyek lain)
 | F6 | Sebagian | wilayah, naga, perisai, antrean sudah ada; zona menyusut belum |
 | F7 | Belum | uji LIVE nyata dan kalibrasi gift |
 
+Tahap visual berikutnya (V0–V8: rig dan animasi, model Fable, Naga, terrain, pencahayaan, unit baru) ada di [Rencana visual](rencana-visual.md).
+
 ---
 
 ## 11. Risiko

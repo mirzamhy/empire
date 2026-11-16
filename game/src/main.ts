@@ -16,6 +16,7 @@ import { UnitRenderer } from "./render/units/units";
 import { Director } from "./render/director";
 import { Fx } from "./render/fx";
 import { Hud } from "./ui/hud";
+import { PerfOverlay } from "./ui/perf";
 
 const params = new URLSearchParams(location.search);
 const app = document.getElementById("app")!;
@@ -165,6 +166,7 @@ function followSun() {
   view.sun.position.set(f.x + sunOffset.x, sunOffset.y, f.z + sunOffset.z);
 }
 
+const perf = params.has("perf") ? new PerfOverlay(view.renderer) : null;
 const clock = new THREE.Clock();
 let fps = 60;
 let paintTimer = 0;
@@ -172,8 +174,10 @@ function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
   const t = clock.elapsedTime;
   fps = fps * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
+  perf?.begin("sim");
   sim.advance(dt);
   dispatch(t);
+  perf?.end("sim");
   paintTimer += dt;
   if (paintTimer > 0.5) {
     paintTimer = 0;
@@ -183,13 +187,22 @@ function frame() {
   terrain.water.position.y = -0.25 + Math.sin(t * 1.4) * 0.05;
   castles.update(sim, t);
   villages.update(sim, t);
+  perf?.begin("units");
   units.update(sim, t);
+  perf?.end("units");
+  perf?.begin("fx");
   fx.update(sim, t);
+  perf?.end("fx");
   director.update(sim, t, dt);
   controls?.update();
   followSun();
+  perf?.begin("hud");
   hud?.update(t);
+  perf?.end("hud");
+  perf?.begin("render");
   view.renderer.render(view.scene, view.camera);
+  perf?.end("render");
+  perf?.frame({ units: sim.units.length, kingdoms: sim.alive.length });
   requestAnimationFrame(frame);
 }
 frame();
@@ -205,7 +218,7 @@ setInterval(() => {
 
 Object.assign(window, {
   __em: {
-    sim, map, view, units, villages, fx, hud, director, router, controls, liveState: () => liveState,
+    sim, map, view, units, villages, fx, hud, director, router, controls, perf, liveState: () => liveState,
     render: () => view.renderer.render(view.scene, view.camera),
     /** Advance the sim and draw once. The browser pane throttles rAF, so tests drive frames by hand. */
     run: (seconds: number) => {

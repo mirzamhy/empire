@@ -5,6 +5,7 @@ Game TikTok LIVE perang kerajaan. Penonton ketik `ikut`, dapat kerajaan atas nam
 ## Dokumen
 - [PRD](docs/PRD.md) — dokumen utama, status fase di §10
 - [README](README.md) — cara menjalankan
+- [Rencana visual](docs/rencana-visual.md) — model Fable, rig dan animasi, semburan Naga, terrain, pencahayaan, unit baru
 
 ## Catatan
 - [Unit pasukan](notes/unit-pasukan.md) — 10 unit, stat, kemampuan

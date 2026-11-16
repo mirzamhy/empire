@@ -5,3 +5,4 @@ dist/
 .obsidian/
 .claude/
 tools/map-rgb.json
+docs/fable/out/
