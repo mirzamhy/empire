@@ -81,13 +81,29 @@
   "territory": {
     "tile": 4,
     "captureSeconds": 3,
-    "castleRadius": 9
+    "castleRadius": 9,
+    "productionTiles": 600,
+    "productionMaxBonus": 0.4
+  },
+  "villages": {
+    "count": 16,
+    "minDist": 48,
+    "castleClear": 18,
+    "radius": 6,
+    "captureSeconds": 4,
+    "claimRadius": 10,
+    "spawnEverySeconds": 60,
+    "spawnUnit": "spearman",
+    "captureExp": 80,
+    "expandRange": 70,
+    "expandShare": 3
   },
   "score": {
     "perTile": 2,
     "perLevel": 50,
     "perKill": 1,
-    "perCastle": 300
+    "perCastle": 300,
+    "perVillage": 120
   },
   "orders": {
     "durationSeconds": 40,

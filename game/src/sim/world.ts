@@ -5,7 +5,7 @@ import { CELL, GRID_W, WORLD_H, WORLD_W, type WorldMap } from "./map";
 import { Rng } from "./rng";
 
 export type Phase = "LOBBY" | "WAR" | "FINAL" | "RESULT";
-export type OrderKind = "attack" | "defend" | "boss";
+export type OrderKind = "attack" | "defend" | "boss" | "expand";
 
 export interface Kingdom {
   id: number;
@@ -34,6 +34,8 @@ export interface Kingdom {
   warTimer: number;
   field: Uint16Array;
   dragonDamage: number;
+  /** villages held (recomputed with the score) */
+  villages: number;
   buffUntil: number;
   crown: boolean;
   unitCount: number;
@@ -54,7 +56,7 @@ export interface Unit {
   passive: boolean;
   atkCd: number;
   retarget: number;
-  tKind: "unit" | "castle" | "dragon" | "home" | null;
+  tKind: "unit" | "castle" | "dragon" | "home" | "village" | null;
   tId: number;
   heading: number;
   moving: boolean;
@@ -65,6 +67,27 @@ export interface Unit {
   bornAt: number;
   from: string | null;
 }
+
+/** Neutral settlement. Standing in it alone for a few seconds takes it; it claims land and trains militia. */
+export interface Village {
+  id: number;
+  name: string;
+  x: number;
+  z: number;
+  /** kingdom id, 0 = neutral */
+  owner: number;
+  /** kingdom currently taking it and for how long */
+  claimKid: number;
+  progress: number;
+  spawnTimer: number;
+  field: Uint16Array;
+}
+
+const VILLAGE_NAMES = [
+  "Sukamaju", "Karangsari", "Wanareja", "Lembahhijau", "Batuputih", "Sidomulyo", "Tanjungsari", "Mekarjaya",
+  "Pasirlaut", "Gunungsari", "Sumberjaya", "Rawabening", "Ciranjang", "Kedungwaru", "Jatimulya", "Bukitasri",
+  "Telagamas", "Padangrumput", "Sukaraja", "Mandalasari",
+];
 
 export interface Dragon {
   hp: number;
@@ -87,6 +110,8 @@ export type SimEvent =
   | { k: "hit"; fromX: number; fromZ: number; x: number; z: number; type: UnitType; dmg: number; on: HitTarget }
   | { k: "death"; x: number; z: number; kid: number; type: UnitType }
   | { k: "dragon"; state: "spawn" | "dead"; by: number | null }
+  /** a village changed hands (prev 0 = it was neutral) */
+  | { k: "village"; id: number; kid: number; prev: number }
   | { k: "phase"; phase: Phase }
   | { k: "ticker"; text: string; color?: string };
 
@@ -128,6 +153,7 @@ export class Sim {
   users = new Map<string, UserRecord>();
   fallenThisRound = 0;
   podium: { key: string; name: string; color: string; score: number }[] = [];
+  readonly villages: Village[];
   /** territory owner per tile (kingdom id, 0 = none) */
   readonly tileOwner: Int32Array;
   readonly tileClaim: Int32Array;
@@ -156,6 +182,33 @@ export class Sim {
     this.tileClaim = new Int32Array(n);
     this.tileProgress = new Float32Array(n);
     this.altarField = map.fieldTo(map.altar.x, map.altar.z);
+    this.villages = this.placeVillages(seed);
+  }
+
+  /** Village spots come from their own rng so they do not shift the war's random sequence. */
+  private placeVillages(seed: number): Village[] {
+    const vc = this.cfg.villages;
+    const rng = new Rng((seed * 7919 + 101) >>> 0);
+    const out: Village[] = [];
+    for (let i = 0; i < vc.count; i++) {
+      const spot = this.map.sampleSpawn(rng, out, vc.minDist, vc.minDist * 0.6, 30);
+      if (!spot) break;
+      out.push({
+        id: out.length + 1, name: VILLAGE_NAMES[i % VILLAGE_NAMES.length], x: spot.x, z: spot.z,
+        owner: 0, claimKid: 0, progress: 0, spawnTimer: 0, field: this.map.fieldTo(spot.x, spot.z),
+      });
+    }
+    return out;
+  }
+
+  village(id: number): Village | null {
+    return this.villages[id - 1] ?? null;
+  }
+
+  /** Territory bonus to passive production: +100% at productionTiles tiles (capped). */
+  productionBonus(k: Kingdom) {
+    const tc = this.cfg.territory;
+    return Math.min(tc.productionMaxBonus, k.tiles / tc.productionTiles);
   }
 
   // ---------------------------------------------------------------- queries
@@ -229,7 +282,8 @@ export class Sim {
       if (!this.joinQueue.some((q) => q.key === key)) this.joinQueue.push({ key, name });
       return { status: "queued" };
     }
-    const spot = this.map.sampleSpawn(this.rng, this.alive, this.cfg.kingdom.spawnMinDist);
+    const taken = [...this.alive, ...this.villages.map((v) => ({ x: v.x, z: v.z }))];
+    const spot = this.map.sampleSpawn(this.rng, taken, this.cfg.kingdom.spawnMinDist);
     if (!spot) {
       if (!this.joinQueue.some((q) => q.key === key)) this.joinQueue.push({ key, name });
       return { status: "queued" };
@@ -262,6 +316,7 @@ export class Sim {
       warTimer: this.rng.next() * 3,
       field: this.map.fieldTo(spot.x, spot.z),
       dragonDamage: 0,
+      villages: 0,
       buffUntil: 0,
       crown: this.podium[0]?.key === key,
       unitCount: 0,
@@ -451,6 +506,12 @@ export class Sim {
     this.tileOwner.fill(0);
     this.tileClaim.fill(0);
     this.tileProgress.fill(0);
+    for (const v of this.villages) {
+      v.owner = 0;
+      v.claimKid = 0;
+      v.progress = 0;
+      v.spawnTimer = 0;
+    }
     for (const u of this.users.values()) u.rejoinAt = 0;
     this.roundId++;
     this.setPhase("LOBBY");
@@ -561,7 +622,7 @@ export class Sim {
         }
       }
       // passive production
-      k.passiveTimer += dt * (this.phase === "FINAL" ? pc.finalMultiplier : 1);
+      k.passiveTimer += dt * (this.phase === "FINAL" ? pc.finalMultiplier : 1) * (1 + this.productionBonus(k));
       if (k.passiveTimer >= pc.everySeconds) {
         k.passiveTimer = 0;
         if (k.passiveCount < pc.maxUnits && this.canSpawn(k)) {
@@ -637,6 +698,13 @@ export class Sim {
     for (let i = 0; i < this.tileOwner.length; i++) if (this.tileOwner[i] === k.id) {
       this.tileOwner[i] = 0;
       this.tileProgress[i] = 0;
+    }
+    for (const v of this.villages) {
+      if (v.owner === k.id) v.owner = 0;
+      if (v.claimKid === k.id) {
+        v.claimKid = 0;
+        v.progress = 0;
+      }
     }
     if (by) {
       by.castlesDestroyed++;
@@ -726,12 +794,42 @@ export class Sim {
       u.tId = near.id;
       return;
     }
+    // expansion: on the "ekspansi" order everyone goes; otherwise small garrisons and a share
+    // of the passive troops take villages near home
+    const vc = this.cfg.villages;
+    const homebody = u.passive && k.unitCount < this.cfg.kingdom.marchAtUnits;
+    const v =
+      order?.kind === "expand"
+        ? this.nearestVillage(u.x, u.z, k, Infinity)
+        : !order && (homebody || (u.passive && u.id % vc.expandShare === 0))
+          ? this.nearestVillage(k.x, k.z, k, vc.expandRange)
+          : null;
+    if (v) {
+      u.tKind = "village";
+      u.tId = v.id;
+      return;
+    }
     const castleId = order?.kind === "attack" ? order.targetId : u.passive && k.unitCount < this.cfg.kingdom.marchAtUnits ? 0 : k.warTargetId;
     const target = castleId ? this.kingdomById(castleId) : null;
     if (target && target.alive && !this.shielded(target)) {
       u.tKind = "castle";
       u.tId = target.id;
     }
+  }
+
+  /** Closest village not held by k within range of (x, z). */
+  private nearestVillage(x: number, z: number, k: Kingdom, range: number): Village | null {
+    let best: Village | null = null;
+    let bd = range;
+    for (const v of this.villages) {
+      if (v.owner === k.id) continue;
+      const d = Math.hypot(v.x - x, v.z - z);
+      if (d < bd) {
+        bd = d;
+        best = v;
+      }
+    }
+    return best;
   }
 
   private updateUnits(dt: number) {
@@ -783,8 +881,21 @@ export class Sim {
         tx = this.dragon.x;
         tz = this.dragon.z;
         reach = st.range + 3;
+      } else if (u.tKind === "village") {
+        const v = this.village(u.tId);
+        if (!v || v.owner === k.id) {
+          u.retarget = 0;
+          u.tKind = "home";
+        } else {
+          // spread out inside the village so the whole squad counts
+          const a = (u.id * 2.39996) % (Math.PI * 2);
+          const ring = 1 + (u.id % 3) * 1.3;
+          tx = v.x + Math.cos(a) * ring;
+          tz = v.z + Math.sin(a) * ring;
+          reach = 0.6;
+        }
       }
-      if (u.tKind === "home" || (!tUnit && !tCastle && u.tKind !== "dragon")) {
+      if (u.tKind === "home" || (!tUnit && !tCastle && u.tKind !== "dragon" && u.tKind !== "village")) {
         // guard ring around own castle
         const a = (u.id * 2.39996) % (Math.PI * 2);
         const ring = 4.5 + (u.id % 3) * 1.2;
@@ -840,7 +951,15 @@ export class Sim {
     let dx = tx - u.x;
     let dz = tz - u.z;
     if (!flying) {
-      const field = tCastle ? tCastle.field : u.tKind === "dragon" ? this.altarField : u.tKind === "home" ? k.field : null;
+      const field = tCastle
+        ? tCastle.field
+        : u.tKind === "dragon"
+          ? this.altarField
+          : u.tKind === "home"
+            ? k.field
+            : u.tKind === "village"
+              ? (this.village(u.tId)?.field ?? null)
+              : null;
       const direct = Math.hypot(dx, dz);
       const nx = u.x + (dx / (direct || 1)) * Math.max(step, 0.8);
       const nz = u.z + (dz / (direct || 1)) * Math.max(step, 0.8);
@@ -1030,16 +1149,73 @@ export class Sim {
   }
 
   private claimCastleTiles(k: Kingdom) {
-    const r = this.cfg.territory.castleRadius;
+    this.claimTiles(k.id, k.x, k.z, this.cfg.territory.castleRadius);
+  }
+
+  private claimTiles(kid: number, x: number, z: number, r: number) {
     const t = this.cfg.territory.tile;
     for (let dz = -r; dz <= r; dz += t)
       for (let dx = -r; dx <= r; dx += t) {
         if (Math.hypot(dx, dz) > r) continue;
-        const i = this.tileIndex(k.x + dx, k.z + dz);
-        if (i < 0 || !this.map.walkable(this.map.cellAt(k.x + dx, k.z + dz))) continue;
-        this.tileOwner[i] = k.id;
+        const i = this.tileIndex(x + dx, z + dz);
+        if (i < 0 || !this.map.walkable(this.map.cellAt(x + dx, z + dz))) continue;
+        this.tileOwner[i] = kid;
         this.tileProgress[i] = this.cfg.territory.captureSeconds;
       }
+  }
+
+  private updateVillages(dt: number) {
+    const vc = this.cfg.villages;
+    const war = this.phase === "WAR" || this.phase === "FINAL";
+    for (const v of this.villages) {
+      if (v.owner && !this.kingdomById(v.owner)?.alive) v.owner = 0;
+      if (war) {
+        const present = new Map<number, number>();
+        this.forNear(v.x, v.z, vc.radius, (u) => {
+          if (u.type === "dragon" || Math.hypot(u.x - v.x, u.z - v.z) > vc.radius) return;
+          present.set(u.kid, (present.get(u.kid) ?? 0) + 1);
+        });
+        if (present.size === 1) {
+          const [kid] = present.keys();
+          if (kid === v.owner) {
+            v.claimKid = 0;
+            v.progress = 0;
+          } else {
+            if (v.claimKid !== kid) {
+              v.claimKid = kid;
+              v.progress = 0;
+            }
+            v.progress += dt;
+            if (v.progress >= vc.captureSeconds) this.captureVillage(v, kid);
+          }
+        } else if (present.size === 0 && v.progress > 0) {
+          v.progress = Math.max(0, v.progress - dt);
+          if (v.progress === 0) v.claimKid = 0;
+        }
+      }
+      if (!v.owner) continue;
+      const k = this.kingdomById(v.owner)!;
+      this.claimTiles(k.id, v.x, v.z, vc.claimRadius);
+      if (!war) continue;
+      v.spawnTimer += dt;
+      if (v.spawnTimer >= vc.spawnEverySeconds) {
+        v.spawnTimer = 0;
+        if (this.canSpawn(k)) this.makeUnit(k, vc.spawnUnit as UnitType, false, null, { x: v.x, z: v.z });
+      }
+    }
+  }
+
+  private captureVillage(v: Village, kid: number) {
+    const k = this.kingdomById(kid);
+    if (!k || !k.alive) return;
+    const prev = v.owner;
+    v.owner = kid;
+    v.claimKid = 0;
+    v.progress = 0;
+    v.spawnTimer = 0;
+    this.gainExp(k, this.cfg.villages.captureExp);
+    this.emit({ k: "village", id: v.id, kid, prev });
+    for (const u of this.units) if (u.kid === kid && u.tKind === "village" && u.tId === v.id) u.retarget = 0;
   }
 
   private updateTerritory(dt: number) {
@@ -1064,6 +1240,7 @@ export class Sim {
       this.tileProgress[i] += dt;
       if (this.tileProgress[i] >= cap) this.tileOwner[i] = kid;
     }
+    this.updateVillages(dt);
     for (const k of this.alive) this.claimCastleTiles(k);
     this.recomputeScores();
   }
@@ -1071,10 +1248,14 @@ export class Sim {
   recomputeScores() {
     const counts = new Map<number, number>();
     for (let i = 0; i < this.tileOwner.length; i++) if (this.tileOwner[i]) counts.set(this.tileOwner[i], (counts.get(this.tileOwner[i]) ?? 0) + 1);
+    const held = new Map<number, number>();
+    for (const v of this.villages) if (v.owner) held.set(v.owner, (held.get(v.owner) ?? 0) + 1);
     const sc = this.cfg.score;
     for (const k of this.kingdoms) {
       k.tiles = counts.get(k.id) ?? 0;
-      k.score = k.tiles * sc.perTile + k.level * sc.perLevel + k.kills * sc.perKill + k.castlesDestroyed * sc.perCastle;
+      k.villages = held.get(k.id) ?? 0;
+      k.score =
+        k.tiles * sc.perTile + k.level * sc.perLevel + k.kills * sc.perKill + k.castlesDestroyed * sc.perCastle + k.villages * sc.perVillage;
     }
   }
 

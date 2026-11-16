@@ -63,7 +63,8 @@ export class Director {
     else if (e.k === "join" && k && now - this.lastJoinShot > 6 && sim.phase !== "LOBBY") {
       this.lastJoinShot = now;
       this.propose({ x: k.x, z: k.z, dist: 44, priority: 40, label: "join", seconds: 2.5 }, now);
-    } else if (e.k === "dragon") this.propose({ x: this.map.altar.x, z: this.map.altar.z, dist: 52, priority: 90, label: "dragon", seconds: 5 }, now);
+    } else if (e.k === "village" && e.prev && k) this.propose({ x: sim.village(e.id)!.x, z: sim.village(e.id)!.z, dist: 40, priority: 30, label: "village", seconds: 3 }, now);
+    else if (e.k === "dragon") this.propose({ x: this.map.altar.x, z: this.map.altar.z, dist: 52, priority: 90, label: "dragon", seconds: 5 }, now);
   }
 
   /** Pick an idle shot when nothing important is happening. */

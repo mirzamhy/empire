@@ -130,12 +130,19 @@ export class LiveRouter {
       }
       return r.ok ? { status: "applied", reason: null } : { status: "ignored", reason: r.reason ?? null };
     }
-    for (const [list, kind] of [[c.defend, "defend"], [c.free, "free"], [c.boss, "boss"]] as const) {
+    for (const [list, kind] of [[c.defend, "defend"], [c.free, "free"], [c.boss, "boss"], [c.expand, "expand"]] as const) {
       if (has(list) >= 0) {
         const r = this.sim.order(key, kind);
         if (r.ok) {
           const k = this.sim.kingdomByKey(key)!;
-          const text = kind === "defend" ? `🛡️ ${k.name} bertahan di kastil` : kind === "boss" ? `🐉 ${k.name} menyerbu Naga!` : `🏳️ ${k.name} kembali bebas`;
+          const text =
+            kind === "defend"
+              ? `🛡️ ${k.name} bertahan di kastil`
+              : kind === "boss"
+                ? `🐉 ${k.name} menyerbu Naga!`
+                : kind === "expand"
+                  ? `🚩 ${k.name} memperluas wilayah!`
+                  : `🏳️ ${k.name} kembali bebas`;
           this.sim.events.push({ k: "ticker", text, color: k.color });
         }
         return r.ok ? { status: "applied", reason: null } : { status: "ignored", reason: r.reason ?? null };

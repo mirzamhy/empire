@@ -110,6 +110,15 @@ export class Hud {
         if (k) this.toast(by ? `⚔️ ${by.name} menghancurkan ${k.name}!` : `💥 Kerajaan ${k.name} runtuh`, "ketik IKUT lagi setelah 60 dtk", by?.color ?? k.color);
         break;
       }
+      case "village": {
+        const v = s.village(e.id);
+        const prev = e.prev ? s.kingdomById(e.prev) : null;
+        if (k && v) {
+          this.tick(prev ? `🏘️ ${k.name} merebut Desa ${v.name} dari ${prev.name}!` : `🏘️ ${k.name} menguasai Desa ${v.name}`, k.color);
+          this.floatAt(v.x, v.z, `🚩 ${v.name}`, k.color);
+        }
+        break;
+      }
       case "level":
         if (k) {
           this.tick(`⬆️ ${k.name} naik ke Level ${e.level}`, k.color);
@@ -154,7 +163,7 @@ export class Hud {
     this.board.innerHTML =
       `<h3>🏆 KLASEMEN</h3>` +
       (top.length
-        ? top.map((k, i) => `<div class="row"><span class="rank">${i + 1}</span><span class="dot" style="background:${k.color}"></span><span class="name">${esc(k.name)}</span><span class="meta">Lv${k.level} · ${k.unitCount}⚔</span></div>`).join("")
+        ? top.map((k, i) => `<div class="row"><span class="rank">${i + 1}</span><span class="dot" style="background:${k.color}"></span><span class="name">${esc(k.name)}</span><span class="meta">Lv${k.level} · ${k.unitCount}⚔${k.villages ? ` · ${k.villages}🏘` : ""}</span></div>`).join("")
         : `<div class="row"><span class="name" style="color:var(--mute)">belum ada kerajaan</span></div>`);
   }
 
@@ -178,6 +187,16 @@ export class Hud {
       c.fillRect((i % tw) * tile * sx, Math.floor(i / tw) * tile * sz, tile * sx + 0.5, tile * sz + 0.5);
     }
     c.globalAlpha = 1;
+    for (const v of s.villages) {
+      const owner = v.owner ? s.kingdomById(v.owner) : null;
+      c.fillStyle = owner?.color ?? "#f4f1ea";
+      c.strokeStyle = "#1a1a1a";
+      c.lineWidth = 1;
+      const x = (v.x + WORLD_W / 2) * sx;
+      const y = (v.z + WORLD_H / 2) * sz;
+      c.fillRect(x - 2.5, y - 2.5, 5, 5);
+      c.strokeRect(x - 2.5, y - 2.5, 5, 5);
+    }
     for (const k of s.alive) {
       c.fillStyle = k.color;
       c.strokeStyle = "#fff";

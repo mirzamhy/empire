@@ -11,6 +11,7 @@ import { Sim } from "./sim/world";
 import { buildTerrain } from "./render/terrain";
 import { createScene } from "./render/scene";
 import { CastleRenderer } from "./render/castles";
+import { VillageRenderer } from "./render/villages";
 import { UnitRenderer } from "./render/units/units";
 import { Director } from "./render/director";
 import { Fx } from "./render/fx";
@@ -25,10 +26,11 @@ view.scene.add(terrain.group);
 
 const sim = new Sim(loadConfig(), map, Number(params.get("seed") ?? (Date.now() & 0xffff)));
 const castles = new CastleRenderer(map, (x, z) => terrain.clearTrees(x, z, 5));
+const villages = new VillageRenderer(map, (x, z) => terrain.clearTrees(x, z, 7.5));
 const units = new UnitRenderer(map);
 units.warmup();
 const fx = new Fx(map);
-view.scene.add(castles.group, units.group, fx.group);
+view.scene.add(castles.group, villages.group, units.group, fx.group);
 const director = new Director(view.camera, map);
 fx.onShake = (power, x, z) => director.shake(power, x, z);
 const studio = params.has("studio");
@@ -112,20 +114,35 @@ if (!studio) bridge.connect();
 
 const terrData = terrain.territoryTex.image.data as Uint8Array;
 const tmpColor = new THREE.Color();
+/** Land tint per tile: soft fill inside, a bright solid edge where the owner changes (the border). */
 function paintTerritory() {
   const colors = new Map(sim.kingdoms.map((k) => [k.id, k.color]));
-  for (let i = 0; i < sim.tileOwner.length; i++) {
-    const o = sim.tileOwner[i];
+  const own = sim.tileOwner;
+  const w = sim.tilesW;
+  const h = sim.tilesH;
+  for (let i = 0; i < own.length; i++) {
+    const o = own[i];
     const j = i * 4;
     if (!o) {
       terrData[j + 3] = 0;
       continue;
     }
+    const x = i % w;
+    const z = (i / w) | 0;
+    // a border tile touches other land but is itself part of a solid patch (2+ own neighbours);
+    // thin trails left by marching troops stay soft so the map does not turn into confetti
+    let same = 0;
+    let diff = 0;
+    if (x > 0) own[i - 1] === o ? same++ : diff++;
+    if (x < w - 1) own[i + 1] === o ? same++ : diff++;
+    if (z > 0) own[i - w] === o ? same++ : diff++;
+    if (z < h - 1) own[i + w] === o ? same++ : diff++;
+    const edge = diff > 0 && same >= 2;
     tmpColor.set(colors.get(o) ?? "#ffffff");
     terrData[j] = tmpColor.r * 255;
     terrData[j + 1] = tmpColor.g * 255;
     terrData[j + 2] = tmpColor.b * 255;
-    terrData[j + 3] = 255;
+    terrData[j + 3] = edge ? 255 : 130;
   }
   terrain.territoryTex.needsUpdate = true;
 }
@@ -165,6 +182,7 @@ function frame() {
   terrain.altarCrystal.rotation.y = t * 1.6;
   terrain.water.position.y = -0.25 + Math.sin(t * 1.4) * 0.05;
   castles.update(sim, t);
+  villages.update(sim, t);
   units.update(sim, t);
   fx.update(sim, t);
   director.update(sim, t, dt);
@@ -187,7 +205,7 @@ setInterval(() => {
 
 Object.assign(window, {
   __em: {
-    sim, map, view, units, fx, hud, director, router, controls, liveState: () => liveState,
+    sim, map, view, units, villages, fx, hud, director, router, controls, liveState: () => liveState,
     render: () => view.renderer.render(view.scene, view.camera),
     /** Advance the sim and draw once. The browser pane throttles rAF, so tests drive frames by hand. */
     run: (seconds: number) => {
@@ -196,6 +214,7 @@ Object.assign(window, {
       dispatch(now);
       paintTerritory();
       castles.update(sim, now);
+      villages.update(sim, now);
       units.update(sim, now);
       fx.update(sim, now);
       for (let i = 0; i < 60; i++) director.update(sim, now, 0.05);

@@ -6,6 +6,7 @@
     "defend": ["bertahan", "defend", "jaga"],
     "free": ["bebas", "free"],
     "boss": ["boss", "naga"],
+    "expand": ["ekspansi", "expand", "perluas", "jajah"],
     "info": ["info", "status"]
   },
   "likes": { "perUnit": 30, "unit": "spearman", "maxUnitsPerMinute": 10 },

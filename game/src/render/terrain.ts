@@ -92,7 +92,8 @@ export function buildTerrain(map: WorldMap): TerrainHandles {
   const territoryW = Math.ceil(WORLD_W / TERRITORY_TILE);
   const territoryH = Math.ceil(WORLD_H / TERRITORY_TILE);
   const territoryTex = new THREE.DataTexture(new Uint8Array(territoryW * territoryH * 4), territoryW, territoryH);
-  territoryTex.magFilter = THREE.NearestFilter;
+  // linear filtering turns the 4 m tiles into soft blobs with a glowing rim at the border
+  territoryTex.magFilter = THREE.LinearFilter;
   territoryTex.flipY = false;
   territoryTex.needsUpdate = true;
 
@@ -104,7 +105,7 @@ export function buildTerrain(map: WorldMap): TerrainHandles {
       .replace("#include <uv_vertex>", "#include <uv_vertex>\nvTerrUv = uv;");
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", "#include <common>\nuniform sampler2D territory;\nvarying vec2 vTerrUv;")
-      .replace("#include <color_fragment>", "#include <color_fragment>\nvec4 terr = texture2D(territory, vTerrUv);\ndiffuseColor.rgb = mix(diffuseColor.rgb, terr.rgb, terr.a * 0.45);");
+      .replace("#include <color_fragment>", "#include <color_fragment>\nvec4 terr = texture2D(territory, vTerrUv);\ndiffuseColor.rgb = mix(diffuseColor.rgb, terr.rgb, terr.a * 0.7);");
   };
   const terrain = new THREE.Mesh(geo, terrainMat);
   terrain.receiveShadow = true;

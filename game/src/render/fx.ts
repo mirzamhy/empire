@@ -461,6 +461,13 @@ export class Fx {
           if (k) this.levelUp(k.x, k.z, now);
         }
         break;
+      case "village":
+        if (sim) {
+          const v = sim.village(e.id);
+          const k = sim.kingdomById(e.kid);
+          if (v && k) this.villageTaken(v.x, v.z, k.color, e.prev !== 0, sim.cfg.villages.claimRadius, now);
+        }
+        break;
       case "dragon":
         if (e.state === "dead" && sim?.dragon) this.explosion(sim.dragon.x, h(sim.dragon.x, sim.dragon.z) + 4, sim.dragon.z, now, 2.2, 0xff5a1a);
         break;
@@ -672,6 +679,15 @@ export class Fx {
     this.burst(this.sparks, x, ground + 0.5, z, now, 18 + tier * 14, color, 3 + tier, 1.6, 1.4, 3, -2.5);
     this.burst(this.glow, x, ground + 1, z, now, 6 + tier * 4, color, 2, 0.6, 0.9, 1.5, -2);
     if (tier >= 2) this.onShake(0.2 * tier, x, z);
+  }
+
+  private villageTaken(x: number, z: number, color: string, stolen: boolean, radius: number, now: number) {
+    const ground = this.map.heightAt(x, z);
+    const c = new THREE.Color(color).getHex();
+    this.ring(x, z, now, radius, c, 0.9);
+    this.ring(x, z, now, 4, 0xffffff, 0.45);
+    this.burst(this.sparks, x, ground + 3.8, z, now, stolen ? 30 : 18, c, 3, 1.4, 1.2, 1.5, 4);
+    this.burst(this.glow, x, ground + 3.8, z, now, 6, c, 1.5, 0.5, 0.7, 1, -1);
   }
 
   private levelUp(x: number, z: number, now: number) {

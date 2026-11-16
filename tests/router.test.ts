@@ -115,3 +115,13 @@ describe("live router", () => {
     expect(sim.dragon?.summonedBy).toBe(sim.kingdomByKey("k")!.id);
   });
 });
+
+describe("expansion command", () => {
+  it("ekspansi sends the kingdom to take villages", () => {
+    const { sim, r } = setup();
+    r.handle(chat("budi_raja", "ikut"));
+    sim.nextPhase();
+    expect(r.handle(chat("budi_raja", "ayo ekspansi!")).status).toBe("applied");
+    expect(sim.kingdomByKey("budi_raja")!.order?.kind).toBe("expand");
+  });
+});
