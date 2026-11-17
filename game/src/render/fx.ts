@@ -5,6 +5,7 @@ import type { WorldMap } from "../sim/map";
 import type { HitTarget, Sim, SimEvent } from "../sim/world";
 import type { UnitType } from "../sim/config";
 import { modelFor } from "./units/rig";
+import { SpellFx } from "./spellfx";
 
 type ShotType = UnitType | "tower" | "dragon";
 
@@ -24,7 +25,7 @@ interface Particle {
   bounce: boolean;
 }
 
-class ParticlePool {
+export class ParticlePool {
   readonly mesh: THREE.InstancedMesh;
   private list: Particle[] = [];
   private m = new THREE.Matrix4();
@@ -112,7 +113,7 @@ interface Flat {
   fade: Fade;
 }
 
-class FlatPool {
+export class FlatPool {
   readonly mesh: THREE.InstancedMesh;
   private list: Flat[] = [];
   private m = new THREE.Matrix4();
@@ -321,13 +322,15 @@ export class Fx {
   private stuck: { x: number; y: number; z: number; yaw: number; pitch: number; t0: number }[] = [];
   private stuckMesh: THREE.InstancedMesh;
 
-  private sparks: ParticlePool;
-  private glow: ParticlePool;
-  private dust: ParticlePool;
-  private debris: ParticlePool;
-  private rings: FlatPool;
-  private scorch: FlatPool;
-  private numbers = new DamageNumbers(480);
+  // the pools and builders below are shared with the spell effects (spellfx.ts)
+  readonly sparks: ParticlePool;
+  readonly glow: ParticlePool;
+  readonly dust: ParticlePool;
+  readonly debris: ParticlePool;
+  readonly rings: FlatPool;
+  readonly scorch: FlatPool;
+  readonly numbers = new DamageNumbers(480);
+  readonly spells: SpellFx;
 
   private pillars: { x: number; y: number; z: number; t0: number; color: THREE.Color; height: number; width: number }[] = [];
   private pillarMesh: THREE.InstancedMesh;
@@ -412,6 +415,9 @@ export class Fx {
     this.dragon.scale.setScalar(2.6);
     this.dragon.visible = false;
     this.group.add(this.dragon);
+
+    this.spells = new SpellFx(this, map);
+    this.group.add(this.spells.group);
   }
 
   private instanced(geo: THREE.BufferGeometry, mat: THREE.Material, cap: number) {
@@ -427,6 +433,7 @@ export class Fx {
   onEvent(e: SimEvent, now: number, sim?: Sim) {
     if (sim) this.kingdomColor = (kid) => sim.kingdomById(kid)?.color ?? "#ffffff";
     const h = (x: number, z: number) => this.map.heightAt(x, z);
+    this.spells.onEvent(e, now, sim);
     switch (e.k) {
       case "shot": {
         if (this.bolts.length >= 500) this.bolts.shift();
@@ -516,7 +523,7 @@ export class Fx {
   // ---------------------------------------------------------------- effect builders
 
   /** Radial burst of particles. */
-  private burst(pool: ParticlePool, x: number, y: number, z: number, now: number, n: number, color: number, speed: number, size: number, life: number, up = 0.6, gravity = 0) {
+  burst(pool: ParticlePool, x: number, y: number, z: number, now: number, n: number, color: number, speed: number, size: number, life: number, up = 0.6, gravity = 0) {
     this.c.set(color);
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -532,11 +539,11 @@ export class Fx {
     }
   }
 
-  private ring(x: number, z: number, now: number, r1: number, color: number, life = 0.45, y?: number) {
+  ring(x: number, z: number, now: number, r1: number, color: number, life = 0.45, y?: number) {
     this.rings.add({ x, y: (y ?? this.map.heightAt(x, z)) + 0.2, z, t0: now, life, r0: 0.2, r1, color: new THREE.Color(color), fade: "color" });
   }
 
-  private scorchMark(x: number, z: number, now: number, r: number, color = 0x1c1410) {
+  scorchMark(x: number, z: number, now: number, r: number, color = 0x1c1410) {
     this.scorch.add({ x, y: this.map.heightAt(x, z) + 0.12, z, t0: now, life: 9, r0: r * 0.3, r1: r, color: new THREE.Color(color), fade: "shrink" });
   }
 
@@ -621,7 +628,7 @@ export class Fx {
     this.number(b.on === "castle" ? b.cx : x, b.on === "castle" ? b.cz : z, b.dmg, b.on, now, b.on === "dragon" ? 6 : 1.8);
   }
 
-  private explosion(x: number, y: number, z: number, now: number, scale: number, color: number) {
+  explosion(x: number, y: number, z: number, now: number, scale: number, color: number) {
     this.burst(this.glow, x, y, z, now, Math.round(10 * scale), color, 4 * scale, 0.55 * scale, 0.5, 0.8, -2);
     this.burst(this.glow, x, y, z, now, Math.round(4 * scale), 0xffe27a, 2 * scale, 0.8 * scale, 0.25, 0.4);
     this.burst(this.sparks, x, y, z, now, Math.round(8 * scale), 0xffc060, 7 * scale, 1.3, 0.5, 1, 12);
@@ -761,6 +768,7 @@ export class Fx {
     this.updatePillars(now);
     if (this.rubbleDirty) this.updateRubble();
 
+    this.spells.update(sim, now, dt);
     for (const p of [this.sparks, this.glow, this.dust, this.debris]) p.update(now, dt);
     this.rings.update(now);
     this.scorch.update(now);

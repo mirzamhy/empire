@@ -69,6 +69,7 @@ export class Director {
       this.lastJoinShot = now;
       this.propose({ x: k.x, z: k.z, dist: 44, priority: 40, label: "join", seconds: 2.5 }, now);
     } else if (e.k === "village" && e.prev && k) this.propose({ x: sim.village(e.id)!.x, z: sim.village(e.id)!.z, dist: 40, priority: 30, label: "village", seconds: 3 }, now);
+    else if (e.k === "spell") this.propose({ x: e.x, z: e.z, dist: e.spell === "heal" || e.spell === "rage" ? 44 : 38, priority: 65, label: "spell", seconds: Math.min(6, 3 + e.seconds * 0.4) }, now);
     else if (e.k === "dragon") this.propose({ x: this.map.altar.x, z: this.map.altar.z, dist: 52, priority: 90, label: "dragon", seconds: 5 }, now);
   }
 

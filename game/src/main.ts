@@ -41,6 +41,22 @@ const landmarks = new LandmarkRenderer(map);
 view.scene.add(landmarks.group);
 const director = new Director(view.camera, map);
 fx.onShake = (power, x, z) => director.shake(power, x, z);
+// bright spells (lightning above all) wash the screen for a moment when they are in view
+const flash = document.createElement("div");
+flash.style.cssText = "position:fixed;inset:0;pointer-events:none;opacity:0;z-index:5;mix-blend-mode:screen";
+document.body.appendChild(flash);
+fx.spells.onFlash = (power, color, x, z) => {
+  const f = controls ? controls.target : director.focus;
+  const near = Math.max(0, 1 - Math.hypot(x - f.x, z - f.z) / 90);
+  if (power * near < 0.03) return;
+  flash.style.transition = "none";
+  flash.style.background = `#${color.toString(16).padStart(6, "0")}`;
+  flash.style.opacity = String(Math.min(0.7, power * near));
+  requestAnimationFrame(() => {
+    flash.style.transition = "opacity 0.45s ease-out";
+    flash.style.opacity = "0";
+  });
+};
 // effects that start at a body part (dragon fire from the mouth) ask the unit renderer where it is
 let fxTime = 0;
 fx.socketOf = (id, socket, out) => {

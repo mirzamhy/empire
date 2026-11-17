@@ -1,7 +1,7 @@
 // HUD overlay: clock, leaderboard, radar, dragon bar, toasts, ticker, castle labels, podium.
 import * as THREE from "three";
 import "./hud.css";
-import { UNIT_ICON, type UnitBundle, type UnitType } from "../sim/config";
+import { SPELL_COLOR, SPELL_ICON, SPELL_LABEL, UNIT_ICON, type UnitBundle, type UnitType } from "../sim/config";
 import { WORLD_H, WORLD_W, type WorldMap } from "../sim/map";
 import { THEME } from "../render/theme";
 import type { Kingdom, Sim, SimEvent } from "../sim/world";
@@ -106,6 +106,9 @@ export class Hud {
         this.floatAt(k.x, k.z, desc.split(" ").slice(0, 3).join(" "), k.color);
         break;
       }
+      case "spell":
+        if (k) this.toast(`${SPELL_ICON[e.spell]} ${SPELL_LABEL[e.spell]}`, `${e.from} · ${k.name}`, SPELL_COLOR[e.spell]);
+        break;
       case "fall": {
         const by = e.by ? s.kingdomById(e.by) : null;
         if (k) this.toast(by ? `⚔️ ${by.name} menghancurkan ${k.name}!` : `💥 Kerajaan ${k.name} runtuh`, "ketik IKUT lagi setelah 60 dtk", by?.color ?? k.color);
