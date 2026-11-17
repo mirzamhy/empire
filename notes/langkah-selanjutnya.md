@@ -1,6 +1,6 @@
 # Langkah selanjutnya
 
-Diperbarui: 2026-11-16. Daftar ini dibuat setelah rencana visual (`docs/rencana-visual.md`) dikerjakan sampai fase V0–V4 dan sebagian V1, V2, V3, V5, V6, V8. Keputusan yang sudah diambil ada di `notes/keputusan.md` (D-019 sampai D-026).
+Diperbarui: 2026-11-17. Daftar ini dibuat setelah rencana visual (`docs/rencana-visual.md`) dikerjakan sampai fase V0–V4 dan sebagian V1, V2, V3, V5, V6, V8. Keputusan yang sudah diambil ada di `notes/keputusan.md` (D-019 sampai D-026).
 
 ## Status singkat
 
@@ -16,7 +16,9 @@ Diperbarui: 2026-11-16. Daftar ini dibuat setelah rencana visual (`docs/rencana-
 | Peta baru 864 x 648 m: benua hutan gelap, 5 barisan gunung dengan kaki bukit, suasana lebih gelap | Selesai (D-030), performa belum diukur |
 | 8 unit baru (mekanisme, model, gift) | Selesai, stat masih draf |
 | Griffin Rider (unit ke-20, gift 80 koin) | Selesai (D-029), stat draf, belum ditonton bertempur |
-| Sungai, jalan, jembatan, landmark | Belum |
+| Tiga peta yang bisa dipilih (`?map=1\|2\|3`) | Selesai (D-031) |
+| Peta 3: sungai yang bisa diseberangi, 7 landmark, kabut, burung, partikel | Selesai (D-031), belum dilihat satu ronde penuh |
+| Jalan tanah, jembatan | Ditunda |
 | Animasi mati dan jasad | Selesai (D-028), belum ditonton satu ronde penuh |
 | Klip kena pukul dan muncul | Belum |
 | Bloom, tone mapping, vignette | Belum (tunggu pengukuran) |
@@ -48,7 +50,7 @@ Diperbarui: 2026-11-16. Daftar ini dibuat setelah rencana visual (`docs/rencana-
 2. **Klip kena pukul, muncul (`spawn`), dan lari** untuk semua humanoid. Plus `brace` (Halberdier dan Shieldbearer), `sneak` (Assassin).
 3. **Efek unit baru:** asap Assassin saat muncul, uap merah Berserker saat HP < 50%, lingkaran merah sasaran Trebuchet sebelum batu mendarat, debu langkah Gajah, panah memantul dari Shieldbearer.
 4. **`windup` di sim** (butuh keputusanmu, lihat pertanyaan 12.2 di rencana): damage jatuh setelah ancang-ancang selesai. Tanpa ini gerakan mulai dari posisi ancang-ancang dan damage terasa sedikit mendahului gerakan.
-5. **Sungai, jalan, jembatan, dan 5 landmark** (V7, rencana 8.3 dan 8.5). Sungai yang tidak bisa diseberangi mengubah alur perang, jadi wajib diuji ulang di 8 seed. Keputusan: sungai halangan sungguhan atau hiasan dangkal (pertanyaan 12.4).
+5. **Sisa rencana peta 3** (`notes/rencana-atmosfer-landmark.md`): penghitung FPS dan pengukuran di PC streaming, pembesaran kastil, air terjun, percikan air, jalan tanah. Sungai dan landmark sudah ada (D-031); sungai diputuskan dangkal dan bisa diseberangi.
 6. **Pencahayaan tahap 2** (V5): tone mapping ACES, bloom, vignette. Hanya setelah ada angka dari PC streaming (bagian 1).
 7. **LOD1 model** (±25% segitiga untuk kamera jauh) dan variasi kepala per unit supaya 40 Spearman tidak kembar (rencana 5.12), pembawa panji tiap 12 unit (5.13).
 8. **Rumput rapat dekat kamera** dan ledakan yang menggoyang pohon (rencana 8.4), kalau anggaran performa mengizinkan.
