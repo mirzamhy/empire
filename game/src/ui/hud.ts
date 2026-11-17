@@ -3,6 +3,7 @@ import * as THREE from "three";
 import "./hud.css";
 import { UNIT_ICON, type UnitBundle, type UnitType } from "../sim/config";
 import { WORLD_H, WORLD_W, type WorldMap } from "../sim/map";
+import { THEME } from "../render/theme";
 import type { Kingdom, Sim, SimEvent } from "../sim/world";
 import { describeUnits } from "../live/router";
 
@@ -228,13 +229,35 @@ export class Hud {
     cv.width = w;
     cv.height = h;
     const c = cv.getContext("2d")!;
-    const colors: Record<string, string> = { water: "#143845", beach: "#a89a7c", plains: "#768c4a", desert: "#86744a", forest: "#2f5a2a", mountain: "#7a7268" };
+    const colors: Record<string, string> = THEME.minimap;
     const step = 2;
     for (let y = 0; y < h; y += step)
       for (let x = 0; x < w; x += step) {
         c.fillStyle = colors[this.map.biomeAt((x / w) * WORLD_W - WORLD_W / 2, (y / h) * WORLD_H - WORLD_H / 2)];
         c.fillRect(x, y, step, step);
       }
+    // rivers as thin blue lines, landmarks as small pale diamonds
+    const px = (wx: number) => ((wx + WORLD_W / 2) / WORLD_W) * w;
+    const pz = (wz: number) => ((wz + WORLD_H / 2) / WORLD_H) * h;
+    c.strokeStyle = "#4f9fc4";
+    c.lineJoin = "round";
+    for (const r of this.map.rivers) {
+      c.lineWidth = Math.max(1.2, (r.points[r.points.length - 1].width / WORLD_W) * w * 1.6);
+      c.beginPath();
+      r.points.forEach((p, i) => (i ? c.lineTo(px(p.x), pz(p.z)) : c.moveTo(px(p.x), pz(p.z))));
+      c.stroke();
+    }
+    c.fillStyle = "#f3e9c6";
+    for (const l of this.map.landmarks) {
+      const x = px(l.x);
+      const y = pz(l.z);
+      c.beginPath();
+      c.moveTo(x, y - 3);
+      c.lineTo(x + 3, y);
+      c.lineTo(x, y + 3);
+      c.lineTo(x - 3, y);
+      c.fill();
+    }
     return cv;
   }
 

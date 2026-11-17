@@ -26,7 +26,9 @@ export function bakeGroup(root: THREE.Object3D, relativeTo?: THREE.Object3D): TH
     const c = mat.color ? mat.color.clone() : new THREE.Color(1, 1, 1);
     // Textured prototype parts (heraldic chest, quartered shield) are painted in the kingdom colour.
     const isTint = mat.userData?.tint === true || c.getHex() === TINT_MARKER || !!mat.map;
-    if (isTint) c.setRGB(1, 1, 1);
+    // tinted parts are baked white, or a grey when the material carries a `shade` (darker lower
+    // boughs, lighter crowns), and take their colour from the instance
+    if (isTint) c.setScalar(typeof mat.userData?.shade === "number" ? mat.userData.shade : 1);
     const glow = mat.type === "MeshBasicMaterial" ? 1 : 0;
     const g = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
     const p = g.getAttribute("position");

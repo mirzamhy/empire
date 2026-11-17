@@ -25,7 +25,7 @@ const params = new URLSearchParams(location.search);
 const app = document.getElementById("app")!;
 const view = createScene(app);
 const map = new WorldMap();
-const terrain = buildTerrain(map, Math.min(1.5, Math.max(0.2, Number(params.get("veg")) || 1)));
+const terrain = buildTerrain(map, Math.min(1.5, Math.max(0.2, Number(params.get("veg")) || 1)), params.get("trees") === "simple");
 view.scene.add(terrain.group);
 
 const sim = new Sim(loadConfig(), map, Number(params.get("seed") ?? (Date.now() & 0xffff)));
