@@ -3,7 +3,7 @@
 import type * as THREE from "three";
 import type { ModelOpts, UnitModel } from "../contract";
 import { box, cone, cyl, finishModel, glow, ico, lambert, part, seg, sheet, socketAt, taperBox, tintMat } from "./kit";
-import { human, humanSockets, PAL, skirt } from "./kit-human";
+import { beltKit, hem, human, humanSockets, PAL, skirt, vambraces } from "./kit-human";
 
 export function build(o: ModelOpts): UnitModel {
   const tint = tintMat(o.tint);
@@ -58,6 +58,11 @@ export function build(o: ModelOpts): UnitModel {
     const pts = [[-0.5, 1.05, -0.3], [0.5, 1.05, -0.3], [-0.62, -0.2, -0.5], [-0.3, -0.75, -0.55], [0, -0.3, -0.52], [0.3, -0.85, -0.55], [0.62, -0.25, -0.5]];
     part(h.spine, sheet(pts, [[0, 2, 3], [0, 3, 4], [0, 4, 1], [1, 4, 5], [1, 5, 6]]), robe);
   }
+
+  // ---- v2 gear layer
+  beltKit(h, wood, bone, false);
+  vambraces(h, robe, bone);
+  hem(h, lambert(0x3b2f55), 1.4, 0.66);
 
   return finishModel(h.root, "humanoid", h.bones, {
     ...humanSockets(h, hornTop),

@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import type { ModelOpts, UnitModel } from "../contract";
 import { box, cyl, finishModel, ico, lambert, part, socketAt, taperBox, tintMat } from "./kit";
-import { human, humanSockets, PAL, skirt } from "./kit-human";
+import { beltKit, greaves, hem, human, humanSockets, PAL, scabbard, skirt, vambraces } from "./kit-human";
 
 export function build(o: ModelOpts): UnitModel {
   const tint = tintMat(o.tint);
@@ -11,7 +11,7 @@ export function build(o: ModelOpts): UnitModel {
   const dark = lambert(PAL.ironDark);
   const leather = lambert(PAL.leatherDark);
   const gold = lambert(PAL.gold);
-  const h = human({ bulk: 1.12, skin: lambert(PAL.skin), torso: iron, sleeves: dark, hands: dark, legs: dark, boots: leather, bendL: 1.0 });
+  const h = human({ bulk: 1.12, skin: lambert(PAL.skin), torso: iron, sleeves: dark, hands: dark, legs: dark, boots: leather, bendL: 1.0, face: "none" });
 
   skirt(h, tint, 0.6, 0.36, 0.54);
   part(h.spine, box(0.8, 0.1, 0.5), leather, 0, 0.14, 0);
@@ -45,6 +45,19 @@ export function build(o: ModelOpts): UnitModel {
   part(h.handR, box(0.36, 0.06, 0.09), dark, 0, 0.17, 0);
   part(h.handR, taperBox(0.15, 0.11, 1.0, 0.045), iron, 0, 0.7, 0);
   part(h.handR, taperBox(0.11, 0.01, 0.22, 0.045, 0.01), iron, 0, 1.31, 0);
+
+  // ---- v2 gear layer
+  beltKit(h, leather, iron, false);
+  scabbard(h, leather, iron, 0.9);
+  greaves(h, iron);
+  vambraces(h, iron, dark);
+  hem(h, lambert(o.crest), 0.6, 0.54);
+  // shield furniture: two bands, corner rivets, a grip bar behind
+  for (const y of [-0.75, 0.8]) part(sh, box(1.0, 0.08, 0.05), rim, 0, y, 0.07);
+  for (const x of [-0.4, 0.4]) for (const y of [-0.98, 1.0]) part(sh, box(0.07, 0.07, 0.05), rim, x, y, 0.08);
+  part(sh, box(0.5, 0.06, 0.06), leather, 0, 0, -0.07);
+  // breastplate ridge
+  part(h.spine, taperBox(0.1, 0.16, 0.7, 0.06), dark, 0, 0.7, 0.27 * h.bulk);
 
   return finishModel(h.root, "humanoid", h.bones, {
     ...humanSockets(h, 0.95),

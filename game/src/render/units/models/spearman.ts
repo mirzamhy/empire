@@ -2,7 +2,7 @@
 // Tier 1 plain helm and wooden shield rim; 2 cheek guards, bigger spear head, iron rim; 3 small crown and pennant.
 import type { ModelOpts, UnitModel } from "../contract";
 import { box, cone, cyl, finishModel, lambert, part, sheet, socketAt, tintMat } from "./kit";
-import { human, humanSockets, PAL, shield, skirt } from "./kit-human";
+import { beltKit, hem, human, humanSockets, legWraps, PAL, shield, skirt, vambraces } from "./kit-human";
 
 export function build(o: ModelOpts): UnitModel {
   const tint = tintMat(o.tint);
@@ -38,6 +38,20 @@ export function build(o: ModelOpts): UnitModel {
   if (o.tier >= 3) part(h.handR, sheet([[0, 3.3, 0], [0, 2.85, 0], [0, 3.0, -0.7], [0, 3.2, -0.45]], [[0, 1, 2], [0, 2, 3]]), tint);
 
   shield(h, "heater", tint, o.tier >= 2 ? iron : wood, 1.05);
+
+  // ---- v2 gear layer
+  beltKit(h, leather, iron);
+  vambraces(h, leather, iron);
+  legWraps(h, lambert(PAL.cream));
+  hem(h, crest, 0.6, 0.52);
+  part(h.spine, cyl(0.34, 0.6, 0.2, 8), mail, 0, 1.0, 0); // mail mantle over the shoulders
+  part(h.head, cyl(0.485, 0.485, 0.03, 9), mail, 0, 0.41, 0); // rolled brim edge
+  part(h.head, box(0.03, 0.3, 0.03), leather, -0.24, 0.24, 0.1, 0, 0, 0.25); // chin strap
+  part(h.head, box(0.03, 0.3, 0.03), leather, 0.24, 0.24, 0.1, 0, 0, -0.25);
+  // spear furniture: langets under the head, grip binding, butt spike
+  part(h.handR, cyl(0.05, 0.05, 0.5, 5), iron, 0, 3.05, 0);
+  part(h.handR, cyl(0.048, 0.048, 0.34, 5), leather, 0, 0, 0);
+  part(h.handR, cyl(0.05, 0.042, 0.2, 5), iron, 0, -1.5, 0); // butt ferrule
 
   return finishModel(h.root, "humanoid", h.bones, {
     ...humanSockets(h, 0.75),

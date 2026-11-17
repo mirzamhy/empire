@@ -1,8 +1,8 @@
 // Longbow Ranger: pointed hood, cloak, quiver on the back, bow as tall as the body in the left hand.
 // Tier 1 cloth hood; 2 fur-trimmed cloak; 3 carved bow with gold tips.
 import type { ModelOpts, UnitModel } from "../contract";
-import { box, cone, cyl, finishModel, ico, lambert, part, seg, socketAt, tintMat } from "./kit";
-import { cape, human, humanSockets, PAL, skirt } from "./kit-human";
+import { box, cone, cyl, finishModel, ico, lambert, part, seg, socketAt, taperBox, tintMat } from "./kit";
+import { beltKit, cape, hem, human, humanSockets, legWraps, PAL, skirt, vambraces } from "./kit-human";
 
 export function build(o: ModelOpts): UnitModel {
   const tint = tintMat(o.tint);
@@ -52,6 +52,16 @@ export function build(o: ModelOpts): UnitModel {
   h.handR.rotation.x = 1.3;
   seg(h.handR, wood, [0, -0.3, 0], [0, 1.0, 0], 0.016, 0.016, 3);
   part(h.handR, cone(0.045, 0.14, 4), lambert(PAL.iron), 0, 1.07, 0);
+
+  // ---- v2 gear layer
+  beltKit(h, dark, lambert(PAL.iron));
+  vambraces(h, leather, dark); // bracers
+  legWraps(h, dark);
+  hem(h, lambert(o.crest), 0.55, 0.5);
+  // brooch holding the mantle, feather in the hood, pouch for spare strings
+  part(h.spine, ico(0.07, 0), gold, 0, 1.0, 0.3);
+  part(h.head, taperBox(0.02, 0.07, 0.4, 0.02), cream, 0.27, 0.62, -0.1, -0.5, 0, -0.2);
+  part(h.hips, box(0.16, 0.16, 0.1), leather, -0.3, 0.02, 0.17);
 
   return finishModel(h.root, "humanoid", h.bones, {
     ...humanSockets(h, 1.0),

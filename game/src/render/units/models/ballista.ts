@@ -3,7 +3,7 @@
 // Bones: base (cart), wheels, turret (the bow assembly, recoils when it fires). Socket muzzle = bolt tip.
 import * as THREE from "three";
 import type { ModelOpts, UnitModel } from "../contract";
-import { box, cone, cyl, finishModel, glow, lambert, part, pivot, seg, sheet, socketAt, taperBox, tintMat } from "./kit";
+import { box, cone, cyl, finishModel, glow, lambert, part, pivot, ring, seg, sheet, socketAt, taperBox, tintMat } from "./kit";
 import { crew, PAL } from "./kit-human";
 
 export function build(o: ModelOpts): UnitModel {
@@ -68,6 +68,45 @@ export function build(o: ModelOpts): UnitModel {
   // two crew behind the engine
   crew(base, tint, -0.75, -0.6, -2.0, 0.2, 0.8);
   crew(base, tint, 0.8, -0.6, -1.7, -0.3, 0.8);
+
+  // ---- v2 detail layer
+  const crestMat = lambert(o.crest);
+  // wheels: iron tyres and hub caps
+  for (const w of [wheelFR, wheelFL, wheelBR, wheelBL]) {
+    const out = w.position.x > 0 ? 1 : -1;
+    part(w, ring(0.6, 0.045, 8), iron, 0, 0, 0, 0, Math.PI / 2, 0);
+    part(w, cone(0.1, 0.16, 6), iron, out * 0.16, 0, 0, 0, 0, -out * Math.PI / 2);
+  }
+  // frame: side rails and iron corner brackets
+  for (const s of [-1, 1]) {
+    part(base, box(0.12, 0.16, 3.1), dark, s * 0.7, 0.26, 0);
+    for (const z of [-1.45, 1.45]) part(base, box(0.2, 0.3, 0.14), iron, s * 0.7, 0.14, z);
+  }
+  // torsion springs: rope bundles in iron caps either side of the stock
+  for (const s of [-1, 1]) {
+    part(turret, cyl(0.13, 0.13, 0.56, 6), rope, s * 0.42, 0.05, 1.62);
+    part(turret, cyl(0.16, 0.16, 0.06, 6), iron, s * 0.42, 0.36, 1.62);
+    part(turret, cyl(0.16, 0.16, 0.06, 6), iron, s * 0.42, -0.26, 1.62);
+  }
+  // winch: ratchet wheel, crank handles, trigger latch
+  part(turret, cyl(0.2, 0.2, 0.06, 8), iron, 0.34, 0.1, -1.2, 0, 0, Math.PI / 2);
+  for (const s of [-1, 1]) {
+    seg(turret, dark, [s * 0.3, 0.1, -1.2], [s * 0.5, 0.1, -1.2], 0.03, 0.03, 4);
+    seg(turret, dark, [s * 0.5, 0.1, -1.2], [s * 0.5, 0.36, -1.32], 0.03, 0.03, 4);
+  }
+  part(turret, box(0.12, 0.14, 0.2), iron, 0, 0.2, -0.72);
+  // ammunition: a rack of spare bolts and a bucket on the cart
+  part(base, box(0.5, 0.4, 0.9), dark, -0.42, 0.42, -0.95);
+  for (let i = 0; i < 4; i++) {
+    const x = -0.58 + i * 0.11;
+    seg(base, wood, [x, 0.5, -1.3], [x, 1.25, -0.75], 0.03, 0.03, 4);
+    part(base, cone(0.05, 0.16, 4), iron, x, 1.31, -0.71, 0.63, 0, 0);
+  }
+  part(base, cyl(0.2, 0.16, 0.3, 7), wood, 0.45, 0.37, -1.05);
+  // pavise: a shield board at the prow to cover the crew, painted in the kingdom colour
+  part(base, taperBox(1.5, 1.3, 0.9, 0.08), wood, 0, 0.6, 1.56, 0.12, 0, 0);
+  part(base, taperBox(1.3, 1.1, 0.7, 0.09), tint, 0, 0.6, 1.58, 0.12, 0, 0);
+  part(base, box(0.3, 0.3, 0.1), crestMat, 0, 0.6, 1.6, 0.12, 0, Math.PI / 4);
 
   return finishModel(root, "siege", { base, turret, wheelFR, wheelFL, wheelBR, wheelBL }, {
     muzzle: socketAt(turret, "muzzle", 0, 0.2, 2.6),

@@ -2,7 +2,7 @@
 // Tier 1 small helm wings; 2 brighter, wider halo and gold pauldron studs; 3 gold wings and a long cape.
 import type { ModelOpts, UnitModel } from "../contract";
 import { box, cone, cyl, finishModel, glow, ico, lambert, part, ring, seg, socketAt, taperBox, tintMat } from "./kit";
-import { cape, human, humanSockets, PAL, skirt } from "./kit-human";
+import { beltKit, cape, greaves, hem, human, humanSockets, PAL, skirt, vambraces } from "./kit-human";
 
 export function build(o: ModelOpts): UnitModel {
   const tint = tintMat(o.tint);
@@ -11,7 +11,7 @@ export function build(o: ModelOpts): UnitModel {
   const gold = lambert(PAL.gold);
   const wood = lambert(PAL.wood);
   const holy = glow(o.tier >= 2 ? 0xfff3c4 : 0xfde68a);
-  const h = human({ bulk: 1.1, skin: lambert(PAL.skin), torso: steel, sleeves: steel, hands: iron, legs: iron, boots: lambert(PAL.ironDark), bendR: 0.5, bendL: 0.6 });
+  const h = human({ bulk: 1.1, skin: lambert(PAL.skin), torso: steel, sleeves: steel, hands: iron, legs: iron, boots: lambert(PAL.ironDark), bendR: 0.5, bendL: 0.6, face: "eyes" });
 
   // tabard: a long panel front and back over the breastplate, gold belt
   part(h.spine, box(0.46, 1.0, 0.6), tint, 0, 0.62, 0);
@@ -48,6 +48,13 @@ export function build(o: ModelOpts): UnitModel {
   part(h.handR, box(0.48, 0.48, 0.12), gold, 0, 2.3, -0.3);
   part(h.handR, cone(0.1, 0.3, 4), iron, 0, 2.67, 0);
   part(h.handR, ico(0.07, 0), gold, 0, -0.95, 0);
+
+  // ---- v2 gear layer
+  beltKit(h, lambert(PAL.leatherDark), gold, false);
+  greaves(h, steel);
+  vambraces(h, steel, gold);
+  hem(h, gold, 0.95, 0.5, 6);
+  part(h.spine, taperBox(0.1, 0.16, 0.7, 0.06), gold, 0, 0.7, 0.27 * h.bulk); // breastplate ridge
 
   return finishModel(h.root, "humanoid", h.bones, {
     ...humanSockets(h, 1.15),

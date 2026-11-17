@@ -3,7 +3,7 @@
 // Extra bones wingR / wingL (on the spine) let the wings beat slowly.
 import type { ModelOpts, UnitModel } from "../contract";
 import { box, cone, cyl, finishModel, glow, ico, lambert, part, pivot, seg, sheet, socketAt, taperBox, tintMat } from "./kit";
-import { human, humanSockets, PAL, skirt } from "./kit-human";
+import { greaves, human, humanSockets, PAL, skirt, vambraces } from "./kit-human";
 
 export function build(o: ModelOpts): UnitModel {
   const tint = tintMat(o.tint);
@@ -14,7 +14,7 @@ export function build(o: ModelOpts): UnitModel {
   const bone = lambert(PAL.bone);
   const magma = glow(0xff5500);
   const hot = glow(0xffd25a);
-  const h = human({ bulk: 1.42, skin: hide, torso: armour, sleeves: hide, hands: armour, legs: armour, boots: horn, bendR: 0.35, bendL: 0.4 });
+  const h = human({ bulk: 1.42, skin: hide, torso: armour, sleeves: hide, hands: armour, legs: armour, boots: horn, bendR: 0.35, bendL: 0.4, face: "none" });
 
   // armour with glowing cracks, spiked pauldrons, belt and long loincloth in the kingdom colour
   part(h.spine, box(0.06, 0.5, 0.04), magma, -0.14, 0.72, 0.345, 0, 0, 0.5);
@@ -70,6 +70,10 @@ export function build(o: ModelOpts): UnitModel {
   part(h.handR, taperBox(0.26, 0.01, 0.5, 0.07, 0.02), armour, 0, 3.0, 0);
   part(h.handR, taperBox(0.14, 0.09, 2.5, 0.1), magma, 0, 1.75, 0);
   part(h.handR, ico(0.09, 0), hot, 0, -0.3, 0);
+
+  // ---- v2 gear layer
+  greaves(h, armour);
+  vambraces(h, armour, magma);
 
   return finishModel(h.root, "humanoid", { ...h.bones, wingR: wings[0], wingL: wings[1] }, {
     ...humanSockets(h, 1.45),

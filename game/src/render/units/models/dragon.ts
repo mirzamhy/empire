@@ -126,6 +126,61 @@ export function build(o: ModelOpts): UnitModel {
     part(tail3, cone(0.05, 0.2, 4), dark, 0, 0.16, -0.35);
   }
 
+  // ---- v2 detail layer
+  // flank scales: two rows of plates down each side
+  for (const s of [-1, 1]) for (let row = 0; row < 2; row++) for (let i = 0; i < 5; i++) {
+    const z = 0.9 - i * 0.42;
+    const rr = Math.sqrt(1 - (z / 1.44) ** 2);
+    const a = 0.75 - row * 0.5;
+    part(body, cone(0.1, 0.26, 4), dark, s * 0.855 * rr * Math.cos(a), 0.765 * rr * Math.sin(a), z - 0.08, -0.6, 0, -s * (Math.PI / 2 - a));
+  }
+  // belly plates
+  for (let i = 0; i < 5; i++) {
+    const z = 0.9 - i * 0.45;
+    const rr = Math.sqrt(1 - ((z - 0.05) / 1.24) ** 2);
+    part(body, box(0.8 * rr, 0.08, 0.36), dark, 0, -0.3 - 0.6 * rr - 0.01, z);
+  }
+  // back spines are small on a young dragon (tier 2 and 3 grow their own)
+  if (o.tier < 2) {
+    for (let i = 0; i < 5; i++) {
+      const z = 0.9 - i * 0.45;
+      part(body, cone(0.07, 0.2, 4), dark, 0, 0.76 * Math.sqrt(1 - (z / 1.5) ** 2) + 0.06, z, -0.3, 0, 0);
+    }
+    part(tail1, cone(0.06, 0.18, 4), dark, 0, 0.4, -0.4);
+    part(tail2, cone(0.05, 0.16, 4), dark, 0, 0.29, -0.3);
+    part(tail2, cone(0.05, 0.14, 4), dark, 0, 0.23, -0.75);
+    part(tail3, cone(0.04, 0.12, 4), dark, 0, 0.15, -0.35);
+  }
+  part(tail1, cone(0.07, 0.22, 4), dark, 0, 0.36, -0.8);
+  for (const s of [-1, 1]) part(tail3, cone(0.05, 0.2, 4), dark, s * 0.1, 0, -0.7, 0, 0, -s * 1.4);
+  // wing shoulders, thigh spikes, a rear claw on each foot
+  for (const s of [-1, 1]) part(body, ico(0.34, 0), red, s * 0.5, 0.42, 0.45);
+  for (const g of [legR, legL]) {
+    part(g, cone(0.07, 0.26, 4), dark, 0, -0.05, -0.3, -2.0, 0, 0);
+    part(g, cone(0.04, 0.18, 4), ivory, 0, -1.1, 0.08, -Math.PI / 2, 0, 0);
+  }
+  // neck fins and a throat pouch in the kingdom colour
+  for (const z of [0.2, 0.8]) part(neck1, cone(0.06, 0.22, 4), dark, 0, 0.4, z);
+  for (const z of [0.15, 0.72]) part(neck2, cone(0.055, 0.2, 4), dark, 0, 0.33, z);
+  part(neck2, ico(0.2, 0), tint, 0, -0.2, 0.5);
+  // head: cheek spikes, snout ridges, a crest, more teeth, a glowing tongue
+  for (const s of [-1, 1]) {
+    if (o.tier < 3) seg(head, ivory, [s * 0.28, -0.02, 0.2], [s * 0.5, -0.1, -0.25], 0.05, 0, 4);
+    part(head, box(0.14, 0.05, 0.2), dark, s * 0.2, 0.3, 0.72, 0, 0, s * 0.3);
+    for (const z of [0.95, 0.62]) part(head, cone(0.03, 0.11, 3), ivory, s * 0.15, -0.16, z, Math.PI, 0, 0);
+    part(jaw, cone(0.03, 0.1, 3), ivory, s * 0.13, 0.03, 0.8);
+    part(jaw, cone(0.03, 0.1, 3), ivory, s * 0.14, 0.03, 0.55);
+  }
+  for (const z of [0.05, -0.15]) part(head, cone(0.06, 0.2, 4), dark, 0, 0.3, z, -0.4, 0, 0);
+  part(jaw, box(0.1, 0.02, 0.5), glow(0xffa040), 0, 0.02, 0.7);
+  // wings: knuckles at the shoulder, wrist and mid-arm, a rib through the inner membrane
+  for (const [w, w2, s] of [[wingR, wingR2, -1], [wingL, wingL2, 1]] as const) {
+    part(w, ico(0.15, 0), dark, 0, 0, 0);
+    part(w, ico(0.1, 0), dark, s * 0.8, 0.05, 0.08);
+    part(w2, ico(0.12, 0), dark, 0, 0, 0);
+    seg(w, dark, [s * 0.3, 0, -0.1], [s * 1.3, 0, -1.2], 0.04, 0.02, 4);
+  }
+
   return finishModel(
     root,
     "dragon",

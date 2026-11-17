@@ -68,7 +68,7 @@ export const TRI_BUDGET: Record<RigKind, number> = {
   rider: 2200,
   quadruped: 2200,
   dragon: 2600,
-  siege: 1800,
+  siege: 2200,
 };
 
 export function countTris(root: THREE.Object3D) {

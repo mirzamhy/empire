@@ -1,8 +1,8 @@
 // Skeleton: open ribcage, skull with dark sockets, rusty sword, torn cloth in the kingdom colour.
 // Tier 1 bare bones; 2 rusty helm cap; 3 broken shield and a shoulder plate.
 import type { ModelOpts, UnitModel } from "../contract";
-import { box, cyl, finishModel, ico, lambert, part, ring, seg, sheet, socketAt, taperBox, tintMat } from "./kit";
-import { human, humanSockets, PAL } from "./kit-human";
+import { box, cone, cyl, finishModel, ico, lambert, part, ring, seg, sheet, socketAt, taperBox, tintMat } from "./kit";
+import { human, humanSockets, legWraps, PAL, vambraces } from "./kit-human";
 
 export function build(o: ModelOpts): UnitModel {
   const tint = tintMat(o.tint);
@@ -51,6 +51,18 @@ export function build(o: ModelOpts): UnitModel {
     const p = part(h.armR, ico(0.2, 0), rust, 0, 0.06, 0);
     p.scale.set(1, 0.7, 1);
   }
+
+  // ---- v2 gear layer
+  vambraces(h, rust, dark);
+  legWraps(h, rust);
+  // a tattered hood and mantle in the kingdom colour, a cracked rusty pauldron on one shoulder
+  part(h.spine, cyl(0.2, 0.5, 0.26, 7), tint, 0, 1.04, 0);
+  for (let i = 0; i < 5; i++) part(h.spine, cone(0.1, 0.3, 4), tint, Math.sin(i * 1.26) * 0.42, 0.84, Math.cos(i * 1.26) * 0.3, Math.PI, 0, 0);
+  part(h.armL, ico(0.2, 0), rust, 0, 0.06, 0).scale.set(1, 0.7, 1.05);
+  part(h.armL, cone(0.06, 0.2, 4), rust, 0.08, 0.24, 0);
+  // rags: a torn shoulder cloth and a loin cloth in the kingdom colour (two-sided)
+  part(h.spine, sheet([[-0.36, 1.1, 0.16], [0.1, 1.12, 0.18], [0.02, 0.5, 0.2], [-0.3, 0.72, 0.19]], [[0, 2, 1], [0, 3, 2], [0, 1, 2], [0, 2, 3]]), tint);
+  part(h.hips, sheet([[-0.2, 0.1, 0.16], [0.2, 0.1, 0.16], [0.12, -0.5, 0.2], [-0.05, -0.36, 0.2]], [[0, 2, 1], [0, 3, 2], [0, 1, 2], [0, 2, 3]]), tint);
 
   return finishModel(h.root, "humanoid", h.bones, {
     ...humanSockets(h, 0.7),

@@ -3,7 +3,7 @@
 import type * as THREE from "three";
 import type { ModelOpts, UnitModel } from "../contract";
 import { box, cone, cyl, finishModel, glow, ico, lambert, part, sheet, socketAt, tintMat } from "./kit";
-import { human, humanSockets, PAL, skirt } from "./kit-human";
+import { beltKit, human, humanSockets, legWraps, PAL, skirt, vambraces } from "./kit-human";
 
 export function build(o: ModelOpts): UnitModel {
   const tint = tintMat(o.tint);
@@ -12,7 +12,7 @@ export function build(o: ModelOpts): UnitModel {
   const leather = lambert(PAL.leatherDark);
   const wood = lambert(PAL.wood);
   const hair = lambert(0xb5451f);
-  const h = human({ bulk: 1.12, skin, torso: skin, sleeves: skin, hands: skin, legs: tint, boots: leather, bendR: 0.6, bendL: 0.6 });
+  const h = human({ bulk: 1.12, skin, torso: skin, sleeves: skin, hands: skin, legs: tint, boots: leather, bendR: 0.6, bendL: 0.6, hair });
 
   // trousers in the kingdom colour, fur belt, war paint on chest and arms
   skirt(h, tint, 0.45, 0.36, 0.44, 7);
@@ -34,6 +34,17 @@ export function build(o: ModelOpts): UnitModel {
 
   axe(h.handR, o, wood, iron);
   axe(h.handL, o, wood, iron);
+
+  // ---- v2 gear layer
+  beltKit(h, leather, iron, false);
+  vambraces(h, leather, iron);
+  legWraps(h, leather);
+  // fur mantle over the shoulders, a trophy skull on the belt, arm rings
+  const fur = lambert(0x6b5a48);
+  part(h.spine, cyl(0.36 * h.bulk, 0.6 * h.bulk, 0.22, 7), fur, 0, 1.02, 0);
+  for (let i = 0; i < 6; i++) part(h.spine, cone(0.09, 0.22, 4), fur, Math.sin(i * 1.05) * 0.56 * h.bulk, 0.9, Math.cos(i * 1.05) * 0.34 * h.bulk, Math.PI, 0, 0);
+  part(h.hips, ico(0.1, 0), lambert(PAL.bone), -0.3 * h.bulk, -0.02, 0.2 * h.bulk);
+  for (const arm of [h.armR, h.armL]) part(arm, cyl(0.13 * h.bulk, 0.13 * h.bulk, 0.05, 6), iron, 0, -0.34, 0);
 
   return finishModel(h.root, "humanoid", h.bones, {
     ...humanSockets(h, 0.85),

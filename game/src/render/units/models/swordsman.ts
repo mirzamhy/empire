@@ -2,7 +2,7 @@
 // Tier 1 open helm; 2 great helm with a gold cross; 3 bright plate, gold trim and a cape.
 import type { ModelOpts, UnitModel } from "../contract";
 import { box, cyl, finishModel, ico, lambert, part, seg, socketAt, taperBox, tintMat } from "./kit";
-import { cape, human, humanSockets, PAL, shield, skirt } from "./kit-human";
+import { beltKit, cape, greaves, hem, human, humanSockets, PAL, scabbard, shield, skirt, vambraces } from "./kit-human";
 
 export function build(o: ModelOpts): UnitModel {
   const tint = tintMat(o.tint);
@@ -10,7 +10,7 @@ export function build(o: ModelOpts): UnitModel {
   const dark = lambert(PAL.ironDark);
   const gold = lambert(PAL.gold);
   const leather = lambert(PAL.leatherDark);
-  const h = human({ bulk: 1.15, skin: lambert(PAL.skin), torso: tint, sleeves: plate, hands: dark, legs: plate, boots: dark });
+  const h = human({ bulk: 1.15, skin: lambert(PAL.skin), torso: tint, sleeves: plate, hands: dark, legs: plate, boots: dark, face: o.tier === 1 ? "eyes" : "none" });
 
   // surcoat over armour, belt, gorget
   skirt(h, tint, 0.8, 0.36, 0.56);
@@ -54,6 +54,16 @@ export function build(o: ModelOpts): UnitModel {
 
   shield(h, "kite", tint, plate, 1.05);
   if (o.tier >= 3) cape(h, tint, 1.7);
+
+  // ---- v2 gear layer
+  beltKit(h, leather, gold, false);
+  scabbard(h, leather, gold, 1.35);
+  greaves(h, plate);
+  vambraces(h, dark, o.tier >= 3 ? gold : plate);
+  hem(h, lambert(o.crest), 0.8, 0.56);
+  // breastplate ridge and fauld lames over the surcoat
+  part(h.spine, taperBox(0.1, 0.16, 0.7, 0.06), plate, 0, 0.7, 0.27 * h.bulk);
+  for (const s of [-1, 1]) part(h.hips, taperBox(0.3, 0.26, 0.3, 0.06), plate, s * 0.27 * h.bulk, -0.1, 0.2 * h.bulk, -0.15, 0, 0);
 
   return finishModel(h.root, "humanoid", h.bones, {
     ...humanSockets(h, 1.2),

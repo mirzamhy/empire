@@ -140,6 +140,18 @@ export function build(o: ModelOpts): UnitModel {
   part(weapon, cone(0.07, 0.34, 4), iron, 0, 2.36, 0);
   if (o.tier >= 3) part(weapon, sheet([[0, 2.15, 0], [0, 1.8, 0], [0, 1.88, -0.6], [0, 2.08, -0.4]], [[0, 1, 2], [0, 2, 3]]), tint);
 
+  // ---- v2 detail layer
+  // chest feather tufts, toes on the hind paws, feather tufts on the legs
+  for (let i = 0; i < 5; i++) part(body, cone(0.12, 0.3, 4), i % 2 ? white : brown, (i - 2) * 0.2, -0.25 - Math.abs(i - 2) * 0.03, 0.95, Math.PI - 0.5, 0, 0);
+  for (const g of [legR, legL]) {
+    for (let i = -1; i <= 1; i++) part(g, box(0.07, 0.09, 0.1), tan, i * 0.08, -1.0, 0.38);
+    part(g, cone(0.08, 0.2, 4), tan, 0, -0.3, -0.14, -2.4, 0, 0);
+  }
+  for (const g of [legFR, legFL]) part(g, cone(0.1, 0.24, 4), brown, 0, -0.32, -0.1, -2.6, 0, 0);
+  // tack: saddle bags and a bedroll
+  for (const s of [-1, 1]) part(body, box(0.1, 0.26, 0.3), leather, s * 0.5, 0.3, -0.42);
+  part(body, cyl(0.1, 0.1, 0.6, 6), cream, 0, 0.62, -0.4, 0, 0, Math.PI / 2);
+
   return finishModel(
     root,
     "dragon",

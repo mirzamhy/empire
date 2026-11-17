@@ -2,7 +2,7 @@
 // Tier 1 wooden staff; 2 bigger crystal with orbiting embers; 3 gold-trimmed robe and high collar.
 import type { ModelOpts, UnitModel } from "../contract";
 import { box, cone, cyl, finishModel, glow, ico, lambert, part, seg, socketAt, tintMat } from "./kit";
-import { human, humanSockets, PAL, skirt } from "./kit-human";
+import { beltKit, hem, human, humanSockets, PAL, skirt, vambraces } from "./kit-human";
 
 export function build(o: ModelOpts): UnitModel {
   const tint = tintMat(o.tint);
@@ -51,6 +51,15 @@ export function build(o: ModelOpts): UnitModel {
     const ember = glow(0xffd25a);
     for (let i = 0; i < 3; i++) part(h.handR, ico(0.06, 0), ember, 0.05 + Math.cos(i * 2.1 + 0.4) * 0.48, 2.85 + i * 0.12, Math.sin(i * 2.1 + 0.4) * 0.48);
   }
+
+  // ---- v2 gear layer
+  beltKit(h, lambert(PAL.leather), gold, false);
+  vambraces(h, tint, gold); // wide cuffs
+  hem(h, gold, 1.3, 0.68);
+  // spell book on the belt, collar clasp
+  part(h.hips, box(0.24, 0.3, 0.1), lambert(0x6b2f2f), -0.36, -0.1, 0.12, 0, 0, 0.1);
+  part(h.hips, box(0.2, 0.26, 0.11), cream, -0.36, -0.1, 0.125, 0, 0, 0.1);
+  part(h.spine, ico(0.07, 0), gold, 0, 1.02, 0.27);
 
   return finishModel(h.root, "humanoid", h.bones, {
     ...humanSockets(h, 1.5),

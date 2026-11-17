@@ -2,7 +2,7 @@
 // Builds watchtowers in friendly villages. Tier 1 plain; 2 brass fittings; 3 gold hammer head.
 import type { ModelOpts, UnitModel } from "../contract";
 import { box, cyl, finishModel, glow, lambert, part, seg, socketAt, taperBox, tintMat } from "./kit";
-import { human, humanSockets, PAL, skirt } from "./kit-human";
+import { beltKit, human, humanSockets, legWraps, PAL, skirt, vambraces } from "./kit-human";
 
 export function build(o: ModelOpts): UnitModel {
   const tint = tintMat(o.tint);
@@ -43,6 +43,16 @@ export function build(o: ModelOpts): UnitModel {
   part(h.handR, box(0.36, 0.36, 0.8), o.tier >= 3 ? lambert(PAL.gold) : iron, 0, 1.75, 0);
   part(h.handR, box(0.4, 0.4, 0.1), brass, 0, 1.75, 0.25);
   part(h.handR, box(0.4, 0.4, 0.1), brass, 0, 1.75, -0.25);
+
+  // ---- v2 gear layer
+  beltKit(h, leather, brass);
+  vambraces(h, leather, brass);
+  legWraps(h, leather);
+  // pack frame on the back: box, bedroll, two plan tubes
+  part(h.spine, box(0.52, 0.56, 0.24), leather, 0, 0.56, -0.36);
+  part(h.spine, box(0.56, 0.06, 0.26), dark, 0, 0.72, -0.36);
+  part(h.spine, cyl(0.11, 0.11, 0.66, 6), lambert(PAL.cream), 0, 0.94, -0.36, 0, 0, Math.PI / 2);
+  for (const s of [-1, 1]) part(h.spine, cyl(0.045, 0.045, 0.7, 5), wood, s * 0.3, 0.6, -0.4, 0, 0, s * 0.12);
 
   return finishModel(h.root, "humanoid", h.bones, {
     ...humanSockets(h, 0.7),

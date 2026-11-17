@@ -68,6 +68,57 @@ export function build(o: ModelOpts): UnitModel {
   const R = arm(-1);
   const L = arm(1);
 
+  // ---- v2 detail layer
+  const steel = lambert(PAL.iron);
+  const moss = lambert(0x5d6b3a);
+  // back: boulders along the hump and down the spine
+  for (const [x, y, z, r] of [[-0.6, 1.25, -0.5, 0.4], [0.55, 1.3, -0.52, 0.36], [0, 0.85, -0.5, 0.42], [-0.3, 0.4, -0.42, 0.3], [0.4, 0.5, -0.42, 0.28]]) part(spine, ico(r, 0), dark, x, y, z);
+  part(spine, ico(0.3, 0), moss, -0.75, 1.5, -0.3);
+  // chest: pectoral slabs, belly blocks, magma seams running out of the core
+  for (const s of [-1, 1]) {
+    part(spine, taperBox(0.62, 0.8, 0.5, 0.08), dark, s * 0.5, 1.08, 0.47, -0.1, 0, s * 0.12);
+    part(spine, box(0.34, 0.2, 0.1), stone, s * 0.3, 0.3, 0.42);
+    part(spine, box(0.05, 0.4, 0.05), magma, s * 0.24, 0.44, 0.47, 0, 0, s * 0.5);
+    part(spine, box(0.05, 0.34, 0.05), magma, s * 0.3, 1.04, 0.54, 0, 0, -s * 0.7);
+  }
+  part(spine, box(0.36, 0.18, 0.1), stone, 0, 0.18, 0.42);
+  // iron band round the waist with rivets, a chain across the chest
+  part(spine, box(1.3, 0.16, 0.06), iron, 0, 0.1, 0.42);
+  part(spine, box(1.3, 0.16, 0.06), iron, 0, 0.1, -0.42);
+  for (const s of [-1, 1]) part(spine, box(0.06, 0.16, 0.86), iron, s * 0.64, 0.1, 0);
+  for (let i = -2; i <= 2; i++) part(spine, box(0.07, 0.07, 0.05), steel, i * 0.27, 0.1, 0.46);
+  for (let i = 0; i < 4; i++) {
+    const t = i / 3;
+    part(spine, ring(0.11, 0.035, 6), steel, 0.8 - 1.3 * t, 1.35 - 1.0 * t, 0.6 - 0.1 * t, i % 2 ? 0 : 1.2, 0, 0.9);
+  }
+  // head: brow, underbite jaw with two stone teeth, rocks at the neck
+  part(head, box(0.5, 0.1, 0.14), stone, 0, 0.36, 0.22);
+  part(head, box(0.46, 0.14, 0.2), stone, 0, 0.03, 0.2);
+  for (const s of [-1, 1]) {
+    part(head, cone(0.05, 0.16, 4), lambert(PAL.bone), s * 0.14, 0.14, 0.27);
+    part(head, ico(0.2, 0), dark, s * 0.36, 0.1, -0.05);
+  }
+  // arms: magma crystals on the shoulders, elbow spike, iron bands, a glowing wrist seam, knuckles and thumb
+  for (const [A, side] of [[R, -1], [L, 1]] as const) {
+    part(A.upper, cone(0.1, 0.42, 5), magma, side * 0.12, 0.5, -0.08, 0, 0, -side * 0.3);
+    part(A.upper, cone(0.07, 0.3, 5), hot, side * 0.3, 0.42, 0.1, 0.2, 0, -side * 0.6);
+    part(A.upper, cone(0.08, 0.3, 5), magma, -side * 0.1, 0.46, 0.14, 0.4, 0, 0);
+    part(A.upper, ico(0.2, 0), moss, side * 0.2, 0.3, -0.3);
+    part(A.fore, cone(0.12, 0.4, 4), stone, 0, 0.02, -0.28, -1.9, 0, 0);
+    part(A.fore, box(0.52, 0.1, 0.52), iron, 0, -0.2, 0);
+    part(A.fore, box(0.63, 0.05, 0.61), magma, 0, -0.74, 0);
+    for (let i = 0; i < 4; i++) part(A.fore, box(0.15, 0.26, 0.16), stone, (i - 1.5) * 0.17, -1.28, 0.3);
+    part(A.fore, box(0.18, 0.3, 0.2), stone, -side * 0.36, -1.1, 0.2);
+  }
+  // legs: knee stones, iron ankle bands, toes, a seam on the thigh; rocks on the hips
+  for (const [g, side] of [[legR, -1], [legL, 1]] as const) {
+    part(g, ico(0.26, 0), stone, 0, -0.5, 0.26);
+    part(g, box(0.5, 0.08, 0.58), iron, 0, -0.62, 0.04);
+    for (let i = -1; i <= 1; i++) part(g, box(0.18, 0.16, 0.2), stone, i * 0.21, -1.02, 0.46);
+    part(g, box(0.05, 0.3, 0.05), magma, side * 0.08, -0.25, 0.27, 0, 0, side * 0.4);
+    part(hips, ico(0.3, 0), dark, side * 0.6, 0.05, -0.05);
+  }
+
   return finishModel(
     root,
     "golem",

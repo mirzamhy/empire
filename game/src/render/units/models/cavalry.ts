@@ -108,6 +108,46 @@ export function build(o: ModelOpts): UnitModel {
   part(sh, taperBox(0.46, 0.46, 0.32, 0.06), tint, 0, 0.2, 0.02);
   part(sh, taperBox(0.04, 0.46, 0.36, 0.06), tint, 0, -0.18, 0.02);
 
+  // ---- v2 detail layer
+  const shadow = lambert(PAL.shadow);
+  // horse: knees and fetlock tufts, eyes, nostrils, forelock and mane locks
+  for (const g of [legFR, legFL, legBR, legBL]) {
+    part(g, ico(0.12, 0), coat, 0, -0.72, 0.02);
+    part(g, cone(0.07, 0.16, 4), maneMat, 0, -1.12, -0.08, Math.PI - 0.4, 0, 0);
+  }
+  for (const s of [-1, 1]) {
+    part(neck, box(0.05, 0.06, 0.07), shadow, s * 0.17, 0.87, 0.24);
+    part(neck, box(0.04, 0.04, 0.05), shadow, s * 0.07, 0.6, 0.68);
+  }
+  for (let i = 0; i < 4; i++) part(neck, cone(0.09, 0.3, 4), maneMat, i % 2 ? 0.07 : -0.07, 0.2 + i * 0.25, -0.3, -1.9, 0, 0);
+  part(neck, cone(0.08, 0.26, 4), maneMat, 0, 1.08, 0.12, 2.2, 0, 0);
+  // tack: reins, breast strap with a medallion, stirrups
+  for (const s of [-1, 1]) {
+    seg(neck, leather, [s * 0.14, 0.7, 0.52], [s * 0.12, 0.09, -0.85], 0.015, 0.015, 3);
+    part(body, box(0.22, 0.05, 0.2), iron, s * 0.56, -0.76, 0.2);
+    part(body, box(0.04, 0.6, 0.05), leather, s * 0.5, -0.4, 0.12);
+  }
+  part(body, box(0.7, 0.09, 0.1), leather, 0, 0.15, 1.32);
+  part(body, ico(0.08, 0), gold, 0, 0.15, 1.4);
+  // saddle bags and a bedroll behind the saddle
+  for (const s of [-1, 1]) {
+    part(body, box(0.14, 0.34, 0.4), leather, s * 0.52, 0.2, -0.62);
+    part(body, box(0.16, 0.1, 0.42), dark, s * 0.52, 0.34, -0.62);
+  }
+  part(body, cyl(0.13, 0.13, 0.8, 6), lambert(PAL.cream), 0, 0.6, -0.6, 0, 0, Math.PI / 2);
+  // caparison: dagged hem
+  for (let i = 0; i < 5; i++) for (const s of [-1, 1]) part(body, cone(0.12, 0.24, 4), tint, s * 0.53, -0.56, -0.9 + i * 0.45, Math.PI, 0, 0);
+  // rider: layered pauldrons, elbows and cuffs, a short cape; lance rings, shield boss
+  for (const A of [R, L]) {
+    part(A.upper, cyl(0.18, 0.2, 0.08, 6), iron, 0, -0.1, 0);
+    part(A.fore, cyl(0.1, 0.09, 0.1, 6), iron, 0, -0.4, 0);
+    part(A.fore, ico(0.095, 0), dark, 0, 0, 0);
+  }
+  part(spine, taperBox(0.9, 0.7, 1.0, 0.05), tint, 0, 0.45, -0.27, 0.15, 0, 0);
+  part(R.hand, cyl(0.07, 0.07, 0.06, 5), gold, 0, 0.9, 0);
+  part(R.hand, cyl(0.07, 0.07, 0.06, 5), gold, 0, -0.5, 0);
+  part(sh, ico(0.08, 0), gold, 0, 0.2, 0.06);
+
   return finishModel(
     root,
     "rider",

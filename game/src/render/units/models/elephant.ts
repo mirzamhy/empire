@@ -78,6 +78,24 @@ export function build(o: ModelOpts): UnitModel {
     part(body, sheet([[0.8, H + 3.15, -1.05], [0.8, H + 2.4, -1.05], [0.8, H + 2.6, -1.95], [0.8, H + 3.05, -1.75]], [[0, 1, 2], [0, 2, 3]]), tint);
   }
 
+  // ---- v2 detail layer
+  const strap = lambert(PAL.leatherDark);
+  // skin folds at the knees and down the trunk, domes on the forehead
+  for (const g of [legFR, legFL, legBR, legBL]) part(g, cyl(0.44, 0.44, 0.1, 7), hideDark, 0, -1.28, 0);
+  for (const t of [0.3, 0.6, 0.9]) part(trunk1, cyl(0.315 - 0.1 * t, 0.315 - 0.1 * t, 0.07, 6), hideDark, 0, -1.1 * t, 0.25 * t, 0.22, 0, 0);
+  for (const s of [-1, 1]) part(head, ico(0.3, 0), hide, s * 0.3, 0.75, 0.45);
+  // harness: girths round the barrel, tassels along the blanket
+  for (const z of [0.95, -1.0]) part(body, cyl(1.2, 1.2, 0.22, 10), strap, 0, 0, z, Math.PI / 2, 0, 0);
+  for (let i = 0; i < 3; i++) for (const s of [-1, 1]) part(body, cone(0.09, 0.3, 4), gold, s * 1.29, -0.38, -0.9 + i * 0.8, Math.PI, 0, 0);
+  // howdah: a shield on each rail and a roof finial
+  for (const s of [-1, 1]) {
+    part(body, cyl(0.34, 0.34, 0.06, 8), iron, s * 0.9, H + 0.4, -0.1, 0, 0, Math.PI / 2);
+    part(body, cyl(0.22, 0.22, 0.08, 8), lambert(o.crest), s * 0.91, H + 0.4, -0.1, 0, 0, Math.PI / 2);
+  }
+  part(body, cone(0.1, 0.4, 5), gold, 0, H + 2.4, -0.1);
+  // iron bands on the tusks
+  for (const s of [-1, 1]) seg(head, iron, [s * 0.49, -0.7275, 1.165], [s * 0.52, -0.825, 1.3], 0.135, 0.13, 5);
+
   return finishModel(root, "quadruped", { body, head, trunk1, trunk2, legFR, legFL, legBR, legBL, tail }, {
     headTop: socketAt(body, "headTop", 0, H + 2.3, -0.1),
     chest: socketAt(body, "chest", 0, 0, 1.6),

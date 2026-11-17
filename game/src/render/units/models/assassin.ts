@@ -3,7 +3,7 @@
 import type * as THREE from "three";
 import type { ModelOpts, UnitModel } from "../contract";
 import { box, cone, cyl, finishModel, glow, lambert, part, sheet, socketAt, taperBox, tintMat } from "./kit";
-import { human, humanSockets, PAL, skirt } from "./kit-human";
+import { beltKit, human, humanSockets, legWraps, PAL, skirt, vambraces } from "./kit-human";
 
 export function build(o: ModelOpts): UnitModel {
   const tint = tintMat(o.tint);
@@ -11,7 +11,7 @@ export function build(o: ModelOpts): UnitModel {
   const dark = lambert(PAL.shadow);
   const leather = lambert(0x3a2f2a);
   const blade = o.tier >= 2 ? glow(0x7dff6a) : lambert(PAL.steel);
-  const h = human({ bulk: 0.86, skin: lambert(PAL.skin), torso: cloth, sleeves: cloth, hands: leather, legs: cloth, boots: leather, bendR: 0.7, bendL: 0.7 });
+  const h = human({ bulk: 0.86, skin: lambert(PAL.skin), torso: cloth, sleeves: cloth, hands: leather, legs: cloth, boots: leather, bendR: 0.7, bendL: 0.7, face: "eyes" });
 
   skirt(h, cloth, 0.4, 0.33, 0.4, 6);
   part(h.spine, box(0.56, 0.08, 0.38), leather, 0, 0.14, 0);
@@ -30,6 +30,18 @@ export function build(o: ModelOpts): UnitModel {
 
   dagger(h.handR, blade, leather);
   dagger(h.handL, blade, leather);
+
+  // ---- v2 gear layer
+  beltKit(h, leather, lambert(PAL.ironDark));
+  vambraces(h, leather, dark);
+  legWraps(h, leather);
+  // throwing knives along the bandolier, a pouch at the back, straps on the thighs
+  for (let i = 0; i < 3; i++) part(h.spine, taperBox(0.02, 0.05, 0.2, 0.02), lambert(PAL.steel), -0.26 + i * 0.16, 0.36 + i * 0.27, 0.22, 0, 0, -0.5);
+  part(h.hips, box(0.26, 0.18, 0.12), leather, 0, 0.04, -0.2);
+  for (const leg of [h.legR, h.legL]) part(leg, cyl(0.16 * h.bulk, 0.155 * h.bulk, 0.06, 6), leather, 0, -0.3, 0);
+  // hood rim and a sheath for a third blade on the back
+  part(h.head, cyl(0.335, 0.335, 0.05, 7), leather, 0, 0.1, -0.06);
+  part(h.spine, taperBox(0.07, 0.1, 0.6, 0.05), leather, 0.18, 0.6, -0.31, 0, 0, 0.5);
 
   return finishModel(h.root, "humanoid", h.bones, {
     ...humanSockets(h, 0.9),
