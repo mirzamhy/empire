@@ -2,6 +2,7 @@
 // URL flags: ?free (orbit camera), ?studio (unit model line-up), ?seed=N, ?demo=N (N mock kingdoms, no bridge needed),
 // ?map=1|2|3 (which map, see sim/maps.ts), ?veg=0.6 (thinner vegetation), ?atmo=0 (no mist, birds or particles),
 // ?trees=simple (plain trees on a map that has detailed ones).
+import { useModelSet } from "./render/units/sets";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { SCHEMA_VERSION, validateCommand, type GameStatusMessage } from "../../shared/contract";
@@ -24,6 +25,8 @@ import { Hud } from "./ui/hud";
 import { PerfOverlay } from "./ui/perf";
 
 const params = new URLSearchParams(location.search);
+// ?models=v1 shows the archived models from before the detail pass (units and the lighthouse)
+if (params.get("models") === "v1") useModelSet("v1");
 const app = document.getElementById("app")!;
 const view = createScene(app);
 const map = new WorldMap();

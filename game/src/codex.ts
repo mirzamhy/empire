@@ -5,6 +5,10 @@ import { UNIT_DESCRIPTIONS } from "./render/units/proto.js";
 import { Animator, POSE_STRIDE } from "./render/units/animator";
 import { clipFor } from "./render/units/anims";
 import { bakeModel, modelFor, type BakedRig } from "./render/units/rig";
+import { useModelSet } from "./render/units/sets";
+
+// units.html?models=v1 shows the archived models from before the detail pass
+if (new URLSearchParams(location.search).get("models") === "v1") useModelSet("v1");
 import type { Unit } from "./sim/world";
 import { BANNER_COLORS, loadConfig, UNIT_ICON, UNIT_LABEL, UNIT_TYPES, type UnitStats, type UnitType } from "./sim/config";
 import { loadEventsConfig } from "./live/router";

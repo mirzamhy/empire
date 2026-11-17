@@ -5,7 +5,7 @@ import * as THREE from "three";
 import type { UnitType } from "../../sim/config";
 import { bakeGroup, TINT_MARKER } from "../bake";
 import { countTris, type BoneName, type RigKind, type SocketName, type UnitModel } from "./contract";
-import { MODELS } from "./models";
+import { activeModels } from "./sets";
 import { buildReferenceSoldier } from "./proto.js";
 
 export interface BakedBone {
@@ -210,7 +210,7 @@ const CREST = "#e8e2d0";
 
 /** The model for a type: a registered Fable model when there is one, else the prototype. */
 export function modelFor(type: UnitType, tier: 1 | 2 | 3 = 1, tint = TINT, crest = CREST): UnitModel {
-  const build = MODELS[type];
+  const build = activeModels()[type];
   return build ? build({ tier, tint, crest }) : prototypeModel(type, tint, crest);
 }
 
