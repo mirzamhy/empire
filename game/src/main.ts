@@ -18,6 +18,8 @@ import { VillageRenderer } from "./render/villages";
 import { UnitRenderer } from "./render/units/units";
 import { Director } from "./render/director";
 import { Fx } from "./render/fx";
+import { LandmarkRenderer } from "./render/landmarks";
+import { Life } from "./render/life";
 import { Hud } from "./ui/hud";
 import { PerfOverlay } from "./ui/perf";
 
@@ -35,6 +37,8 @@ const units = new UnitRenderer(map);
 units.warmup();
 const fx = new Fx(map);
 view.scene.add(castles.group, villages.group, units.group, fx.group);
+const landmarks = new LandmarkRenderer(map);
+view.scene.add(landmarks.group);
 const director = new Director(view.camera, map);
 fx.onShake = (power, x, z) => director.shake(power, x, z);
 // effects that start at a body part (dragon fire from the mouth) ask the unit renderer where it is
@@ -46,6 +50,18 @@ fx.socketOf = (id, socket, out) => {
 const studio = params.has("studio");
 const hud = studio ? null : new Hud(sim, map, view.camera);
 let controls: OrbitControls | null = null;
+director.onPlace = (name, why) => (why === "tour" ? hud?.toast(`📍 ${name}`, map.def.name, "#f3e9c6") : hud?.toast(`⚔️ Perang besar di dekat ${name}!`, "", "#e5484d"));
+// mist, birds and drifting particles, for maps that have them
+const life = map.def.life && !studio && params.get("atmo") !== "0" ? new Life(map) : null;
+if (life) view.scene.add(life.group);
+const hazeColor = new THREE.Color();
+const lifeFocus = new THREE.Vector3();
+function updateLife(t: number, dt: number) {
+  if (!life) return;
+  lifeFocus.copy(controls ? controls.target : director.focus);
+  if (view.scene.fog) hazeColor.copy(view.scene.fog.color);
+  life.update(sim.phase, t, dt, view.camera, lifeFocus, hazeColor, view.renderer.domElement.height);
+}
 
 if (studio || params.has("free")) {
   director.enabled = false;
@@ -163,6 +179,7 @@ function dispatch(now: number) {
   for (const e of sim.drainEvents()) {
     hud?.onEvent(e);
     fx.onEvent(e, now, sim);
+    life?.onEvent(e);
     if (e.k === "death") units.addCorpse(sim, e, now);
     director.onEvent(e, sim, now);
   }
@@ -212,6 +229,7 @@ function frame() {
   director.update(sim, t, dt);
   controls?.update();
   followSun();
+  updateLife(t, dt);
   perf?.begin("hud");
   hud?.update(t);
   perf?.end("hud");
@@ -234,7 +252,7 @@ setInterval(() => {
 
 Object.assign(window, {
   __em: {
-    sim, map, view, units, villages, fx, hud, director, router, controls, perf, liveState: () => liveState,
+    sim, map, view, units, villages, fx, hud, director, router, controls, perf, life, liveState: () => liveState,
     render: () => view.renderer.render(view.scene, view.camera),
     /** Advance the sim and draw once. The browser pane throttles rAF, so tests drive frames by hand. */
     run: (seconds: number) => {
@@ -251,6 +269,7 @@ Object.assign(window, {
       terrain.update(now);
       if (!studio) atmosphere.update(sim.phase, seconds);
       followSun();
+      updateLife(now, Math.min(seconds, 2));
       hud?.update(now);
       view.renderer.render(view.scene, view.camera);
     },

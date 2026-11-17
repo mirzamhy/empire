@@ -26,7 +26,12 @@ export class Director {
   /** smoothed camera position before shake is added */
   private base = new THREE.Vector3();
   private trauma = 0;
+  private lastLandmark = -1;
+  private lobbyTurn = 0;
+  private lastNamed = -999;
   enabled = true;
+  /** called when the camera visits a landmark (lobby tour) or finds a battle next to one */
+  onPlace: (name: string, why: "tour" | "battle") => void = () => {};
 
   constructor(
     private camera: THREE.PerspectiveCamera,
@@ -69,6 +74,15 @@ export class Director {
 
   /** Pick an idle shot when nothing important is happening. */
   private idle(sim: Sim, now: number) {
+    // lobby tour: every other idle shot visits the next landmark of the map
+    const marks = this.map.landmarks;
+    if (sim.phase === "LOBBY" && marks.length && this.lobbyTurn++ % 2 === 1) {
+      this.lastLandmark = (this.lastLandmark + 1) % marks.length;
+      const l = marks[this.lastLandmark];
+      this.propose({ x: l.x, z: l.z, dist: 46 + l.r * 2.2, priority: 5, label: "landmark", seconds: 5 }, now);
+      this.onPlace(l.name, "tour");
+      return;
+    }
     if (sim.phase === "LOBBY" || sim.phase === "RESULT" || now - this.lastOverview > 40 || sim.alive.length === 0) {
       this.lastOverview = now;
       this.propose({ x: 0, z: 0, dist: 420 * WORLD_SCALE, priority: 5, label: "overview", seconds: sim.phase === "WAR" || sim.phase === "FINAL" ? 6 : 8 }, now);
@@ -93,6 +107,11 @@ export class Director {
     }
     if (best && bestN >= 4) {
       this.propose({ x: best.x, z: best.z, dist: 46, priority: 10, label: "battle", seconds: 6 }, now);
+      const near = this.map.landmarkNear(best.x, best.z);
+      if (near && bestN >= 8 && now - this.lastNamed > 45) {
+        this.lastNamed = now;
+        this.onPlace(near.name, "battle");
+      }
       return;
     }
     const lead = sim.leaderboard()[0];
