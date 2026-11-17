@@ -64,7 +64,7 @@
     "necromancer": { "hp": 170, "dmg": 30, "range": 7.5, "speed": 4.0, "scale": 0.45, "ranged": true, "raise": 3, "tags": ["support"] },
     "cavalry":     { "hp": 250, "dmg": 32, "range": 1.9, "speed": 6.4, "scale": 0.40, "tags": ["big"] },
     "golem":       { "hp": 550, "dmg": 52, "range": 2.1, "speed": 3.1, "scale": 0.55, "arrowResist": 0.3, "tags": ["big"] },
-    "dragon":      { "hp": 750, "dmg": 70, "range": 6.0, "speed": 5.8, "scale": 0.5, "flying": true, "splash": 2 },
+    "dragon":      { "hp": 750, "dmg": 70, "range": 6.0, "speed": 5.8, "scale": 0.9, "flying": true, "splash": 2 },
     "demon":       { "hp": 1100, "dmg": 95, "range": 2.4, "speed": 4.2, "scale": 0.62, "aura": 0.1, "auraRange": 6, "tags": ["big"] },
     "skeleton":    { "hp": 60,  "dmg": 10, "range": 1.5, "speed": 4.4, "scale": 0.38 },
     "halberdier":  { "hp": 170, "dmg": 22, "range": 2.4, "speed": 4.1, "scale": 0.42, "bonusVs": { "big": 0.6 } },
