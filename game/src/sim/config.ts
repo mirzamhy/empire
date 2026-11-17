@@ -103,6 +103,20 @@ export const UNIT_ICON: Record<UnitType, string> = {
   griffin: "🦅",
 };
 
+/** Spells a gift can cast (config: `spells`, gift tiers in events.config.json). */
+export const SPELLS = ["meteor", "lightning", "frost", "poison", "heal", "rage"] as const;
+export type SpellId = (typeof SPELLS)[number];
+export const SPELL_LABEL: Record<SpellId, string> = {
+  meteor: "Hujan Meteor",
+  lightning: "Petir Berantai",
+  frost: "Badai Es",
+  poison: "Kabut Racun",
+  heal: "Cahaya Suci",
+  rage: "Amarah Perang",
+};
+export const SPELL_ICON: Record<SpellId, string> = { meteor: "☄️", lightning: "⚡", frost: "❄️", poison: "☠️", heal: "💚", rage: "🔥" };
+export const SPELL_COLOR: Record<SpellId, string> = { meteor: "#ff6a2a", lightning: "#9fd0ff", frost: "#8fe3ff", poison: "#7ed957", heal: "#ffe27a", rage: "#ff3b30" };
+
 /** 24 banner colours, spread around the hue wheel so neighbours differ. */
 export const BANNER_COLORS = [
   "#c0392b", "#2563eb", "#16a34a", "#9333ea", "#ea8a0c", "#0d9488", "#db2777", "#0ea5e9",

@@ -1,6 +1,6 @@
 // EMPIRE simulation: kingdoms, units, combat, territory, dragon, rounds.
 // Pure TS and deterministic for a given seed and input order. Rendering reads its state and events.
-import { BANNER_COLORS, UNIT_TYPES, type GameConfig, type UnitBundle, type UnitType } from "./config";
+import { BANNER_COLORS, UNIT_TYPES, type GameConfig, type SpellId, type UnitBundle, type UnitType } from "./config";
 import { CELL, GRID_W, WORLD_H, WORLD_W, type WorldMap } from "./map";
 import { Rng } from "./rng";
 
@@ -37,6 +37,10 @@ export interface Kingdom {
   /** villages held (recomputed with the score) */
   villages: number;
   buffUntil: number;
+  /** Amarah Perang: troops hit harder and march faster until this time */
+  rageUntil: number;
+  /** earliest time the next queued spell may be cast */
+  spellAt: number;
   crown: boolean;
   unitCount: number;
   passiveCount: number;
@@ -69,6 +73,23 @@ export interface Unit {
   /** stealth units become targetable after their first attack or the first damage they take */
   revealed: boolean;
   trampleCd: number;
+  /** spell effects, as the sim time they end: on fire, poisoned, slowed by frost, stunned by lightning */
+  burnUntil: number;
+  poisonUntil: number;
+  chillUntil: number;
+  stunUntil: number;
+  /** kingdom that gets the kills of burn and poison */
+  dotKid: number;
+}
+
+/** Lingering spell area: frost slows and bites, poison keeps hurting after leaving the cloud. */
+export interface Zone {
+  spell: "frost" | "poison";
+  kid: number;
+  x: number;
+  z: number;
+  r: number;
+  until: number;
 }
 
 /** Neutral settlement. Standing in it alone for a few seconds takes it; it claims land and trains militia. */
@@ -122,6 +143,13 @@ export type SimEvent =
   /** a village changed hands (prev 0 = it was neutral) */
   | { k: "village"; id: number; kid: number; prev: number }
   | { k: "tower"; id: number; kid: number }
+  /** a spell was cast: (x, z) is its centre, r its reach, seconds how long it lasts (0 = instant) */
+  | { k: "spell"; spell: SpellId; kid: number; x: number; z: number; r: number; seconds: number; from: string }
+  /** a meteor is on its way and lands after `delay` seconds */
+  | { k: "strike"; x: number; z: number; r: number; delay: number }
+  | { k: "impact"; x: number; z: number; r: number; dmg: number }
+  /** lightning: first point is struck from the sky, the rest are jumps between units */
+  | { k: "chain"; kid: number; points: { x: number; z: number; dmg: number }[] }
   | { k: "phase"; phase: Phase }
   | { k: "ticker"; text: string; color?: string };
 
@@ -178,6 +206,10 @@ export class Sim {
   private grid = new Map<number, Unit[]>();
   private altarField: Uint16Array;
   private colorCursor = 0;
+  zones: Zone[] = [];
+  private strikes: { kid: number; x: number; z: number; at: number }[] = [];
+  private spellQueue: { key: string; spell: SpellId; from: string }[] = [];
+  private spellTimer = 0;
 
   constructor(
     readonly cfg: GameConfig,
@@ -329,6 +361,8 @@ export class Sim {
       dragonDamage: 0,
       villages: 0,
       buffUntil: 0,
+      rageUntil: 0,
+      spellAt: 0,
       crown: this.podium[0]?.key === key,
       unitCount: 0,
       passiveCount: 0,
@@ -401,6 +435,16 @@ export class Sim {
     if (k) k.buffUntil = Math.max(k.buffUntil, this.t) + seconds;
   }
 
+  /**
+   * Queue a spell for a kingdom. It is cast as soon as the war is on, the kingdom's cooldown has
+   * passed and (for attack spells) there is something to hit.
+   */
+  castSpell(key: string, name: string, spell: SpellId): "queued" | "ignored" {
+    if (!this.kingdomByKey(key) || this.spellQueue.length >= 60) return "ignored";
+    this.spellQueue.push({ key, spell, from: name });
+    return "queued";
+  }
+
   kick(key: string) {
     const k = this.kingdomByKey(key);
     if (k) this.fall(k, null);
@@ -455,6 +499,7 @@ export class Sim {
     this.buildGrid();
     this.updateKingdoms(dt);
     this.updateUnits(dt);
+    this.updateSpells(dt);
     this.updateDragon(dt);
     this.healTimer += dt;
     if (this.healTimer >= 1) {
@@ -510,6 +555,9 @@ export class Sim {
     this.units = [];
     this.dragon = null;
     this.dragonSpawnedThisRound = false;
+    this.zones = [];
+    this.strikes = [];
+    this.spellQueue = [];
     this.joinQueue = [];
     this.fallenThisRound = 0;
     this.extraSeconds = 0;
@@ -607,6 +655,11 @@ export class Sim {
       from,
       revealed: false,
       trampleCd: 0,
+      burnUntil: 0,
+      poisonUntil: 0,
+      chillUntil: 0,
+      stunUntil: 0,
+      dotKid: 0,
     };
     this.units.push(u);
     k.unitCount++;
@@ -918,6 +971,10 @@ export class Sim {
         continue;
       }
       const st = this.cfg.unitTypes[u.type];
+      if (u.stunUntil > this.t) {
+        u.moving = false;
+        continue;
+      }
       u.atkCd -= dt;
       u.retarget -= dt;
       if (u.retarget <= 0) {
@@ -990,7 +1047,8 @@ export class Sim {
       }
       const dist = Math.hypot(tx - u.x, tz - u.z);
       if (dist > reach) {
-        this.moveUnit(u, k, tx, tz, tCastle, st.speed * dt * this.map.speedFactor(u.x, u.z) * (st.flying ? 1 / this.map.speedFactor(u.x, u.z) : 1), !!st.flying);
+        const pace = (u.chillUntil > this.t ? this.cfg.spells.frost.slow : 1) * (k.rageUntil > this.t ? this.cfg.spells.rage.speed : 1);
+        this.moveUnit(u, k, tx, tz, tCastle, st.speed * pace * dt * this.map.speedFactor(u.x, u.z) * (st.flying ? 1 / this.map.speedFactor(u.x, u.z) : 1), !!st.flying);
         u.moving = true;
         // trample: a charging elephant hurts and shoves the small ground units in its way
         if (st.trample && war) {
@@ -1039,6 +1097,7 @@ export class Sim {
           u.attackAt = this.t;
           let dmg = u.dmg * (0.9 + this.rng.next() * 0.2);
           if (this.t < k.buffUntil) dmg *= 1.2;
+          if (this.t < k.rageUntil) dmg *= this.cfg.spells.rage.damage;
           if (this.hasAura(u, k)) dmg *= 1 + (this.cfg.unitTypes.demon.aura ?? 0);
           if (st.rage) dmg *= 1 + st.rage * (1 - Math.max(0, u.hp) / u.maxHp);
           dmg *= this.bonusVs(u.type, tUnit ? tUnit.type : tCastle ? "castle" : "dragon");
@@ -1218,6 +1277,195 @@ export class Sim {
         if (o.kid === u.kid && o.hp < o.maxHp) o.hp = Math.min(o.maxHp, o.hp + (st.heal ?? 0));
       });
     }
+  }
+
+  // ---------------------------------------------------------------- spells
+
+  private updateSpells(dt: number) {
+    const sc = this.cfg.spells;
+    const war = this.phase === "WAR" || this.phase === "FINAL";
+    if (war && this.spellQueue.length) {
+      // at most one cast per kingdom per cooldown; the rest wait their turn
+      const waiting = this.spellQueue;
+      this.spellQueue = [];
+      for (const q of waiting) {
+        const k = this.kingdomByKey(q.key);
+        if (!k) continue;
+        if (this.t < k.spellAt) {
+          this.spellQueue.push(q);
+          continue;
+        }
+        if (this.cast(k, q.spell, q.from)) k.spellAt = this.t + sc.cooldownSeconds;
+        else {
+          // nothing to hit yet: try again shortly
+          k.spellAt = this.t + 2;
+          this.spellQueue.push(q);
+        }
+      }
+    }
+    if (this.strikes.length) {
+      const due = this.strikes.filter((s) => s.at <= this.t);
+      if (due.length) {
+        this.strikes = this.strikes.filter((s) => s.at > this.t);
+        for (const s of due) this.meteorImpact(s.kid, s.x, s.z);
+      }
+    }
+    this.spellTimer += dt;
+    if (this.spellTimer < 0.5) return;
+    const span = this.spellTimer;
+    this.spellTimer = 0;
+    if (this.zones.length) {
+      this.zones = this.zones.filter((z) => z.until > this.t);
+      for (const z of this.zones) {
+        const by = this.kingdomById(z.kid);
+        if (!by) continue;
+        this.forNear(z.x, z.z, z.r, (o) => {
+          if (!this.isEnemy(o, z.kid) || Math.hypot(o.x - z.x, o.z - z.z) > z.r) return;
+          if (z.spell === "frost") {
+            o.chillUntil = this.t + 1.2;
+            this.damageUnit(o, sc.frost.dps * span, by, false);
+          } else {
+            o.poisonUntil = this.t + sc.poison.lingerSeconds;
+            o.dotKid = z.kid;
+          }
+        });
+      }
+    }
+    // burning and poisoned troops keep losing health
+    for (const u of this.units) {
+      if (!u.alive || (u.burnUntil <= this.t && u.poisonUntil <= this.t)) continue;
+      const by = this.kingdomById(u.dotKid);
+      if (!by) continue;
+      const dps = (u.burnUntil > this.t ? sc.meteor.burnDps : 0) + (u.poisonUntil > this.t ? sc.poison.dps : 0);
+      this.damageUnit(u, dps * span, by, false);
+    }
+  }
+
+  /** Cast now. False when an attack spell finds nothing to hit. */
+  private cast(k: Kingdom, spell: SpellId, from: string): boolean {
+    const sc = this.cfg.spells;
+    if (spell === "heal") {
+      for (const u of this.units) {
+        if (!u.alive || u.kid !== k.id) continue;
+        u.hp = Math.min(u.maxHp, u.hp + u.maxHp * sc.heal.unitPercent);
+        u.burnUntil = u.poisonUntil = u.chillUntil = 0;
+      }
+      k.hp = Math.min(k.maxHp, k.hp + k.maxHp * sc.heal.castlePercent);
+      this.emit({ k: "spell", spell, kid: k.id, x: k.x, z: k.z, r: 0, seconds: 0, from });
+      return true;
+    }
+    if (spell === "rage") {
+      k.rageUntil = Math.max(k.rageUntil, this.t) + sc.rage.seconds;
+      this.emit({ k: "spell", spell, kid: k.id, x: k.x, z: k.z, r: 0, seconds: sc.rage.seconds, from });
+      return true;
+    }
+    const reach = spell === "meteor" ? sc.meteor.spread : spell === "lightning" ? sc.lightning.chainRange : sc[spell].radius;
+    let spot = this.densestEnemies(k, reach);
+    if (!spot && spell === "meteor") {
+      // no troops in sight: bombard the nearest castle that is not shielded
+      let bd = Infinity;
+      for (const e of this.kingdoms) {
+        if (!e.alive || e.id === k.id || this.shielded(e)) continue;
+        const d = Math.hypot(e.x - k.x, e.z - k.z);
+        if (d < bd) {
+          bd = d;
+          spot = { x: e.x, z: e.z };
+        }
+      }
+    }
+    if (!spot) return false;
+    if (spell === "meteor") {
+      const c = sc.meteor;
+      this.emit({ k: "spell", spell, kid: k.id, x: spot.x, z: spot.z, r: c.spread + c.radius, seconds: c.seconds + 1, from });
+      for (let i = 0; i < c.count; i++) {
+        const a = this.rng.next() * Math.PI * 2;
+        const d = i === 0 ? 0 : Math.sqrt(this.rng.next()) * c.spread;
+        const delay = 1 + (i / Math.max(1, c.count - 1)) * c.seconds + this.rng.next() * 0.15;
+        const x = spot.x + Math.cos(a) * d;
+        const z = spot.z + Math.sin(a) * d;
+        this.strikes.push({ kid: k.id, x, z, at: this.t + delay });
+        this.emit({ k: "strike", x, z, r: c.radius, delay });
+      }
+    } else if (spell === "lightning") {
+      const c = sc.lightning;
+      // the bolt picks the toughest enemy in the crowd, then jumps to whoever stands closest
+      let cur: Unit | null = null;
+      this.forNear(spot.x, spot.z, reach, (o) => {
+        if (this.isEnemy(o, k.id) && Math.hypot(o.x - spot!.x, o.z - spot!.z) <= reach && (!cur || o.hp > cur.hp)) cur = o;
+      });
+      if (!cur) return false;
+      const seen = new Set<number>();
+      const points: { x: number; z: number; dmg: number }[] = [];
+      let dmg = c.damage;
+      for (let i = 0; i <= c.chains && cur; i++) {
+        const u: Unit = cur;
+        seen.add(u.id);
+        points.push({ x: u.x, z: u.z, dmg });
+        u.stunUntil = this.t + c.stunSeconds;
+        this.damageUnit(u, dmg, k, false);
+        dmg *= c.falloff;
+        let next: Unit | null = null;
+        let nd = c.chainRange;
+        this.forNear(u.x, u.z, c.chainRange, (o) => {
+          const d = Math.hypot(o.x - u.x, o.z - u.z);
+          if (d < nd && !seen.has(o.id) && this.isEnemy(o, k.id)) {
+            nd = d;
+            next = o;
+          }
+        });
+        cur = next;
+      }
+      this.emit({ k: "spell", spell, kid: k.id, x: points[0].x, z: points[0].z, r: c.chainRange, seconds: 0, from });
+      this.emit({ k: "chain", kid: k.id, points });
+    } else {
+      const c = sc[spell];
+      this.zones.push({ spell, kid: k.id, x: spot.x, z: spot.z, r: c.radius, until: this.t + c.seconds });
+      this.emit({ k: "spell", spell, kid: k.id, x: spot.x, z: spot.z, r: c.radius, seconds: c.seconds, from });
+    }
+    return true;
+  }
+
+  /** Centre of the thickest crowd of k's enemies within `r`; crowds nearer to k's castle win ties. */
+  private densestEnemies(k: Kingdom, r: number): { x: number; z: number } | null {
+    let best: { x: number; z: number } | null = null;
+    let bestScore = 0;
+    for (const u of this.units) {
+      if (!u.alive || !this.isEnemy(u, k.id)) continue;
+      let n = 0;
+      this.forNear(u.x, u.z, r, (o) => {
+        if (this.isEnemy(o, k.id) && Math.hypot(o.x - u.x, o.z - u.z) <= r) n++;
+      });
+      const score = n / (1 + Math.hypot(u.x - k.x, u.z - k.z) / 120);
+      if (score > bestScore) {
+        bestScore = score;
+        best = { x: u.x, z: u.z };
+      }
+    }
+    return best;
+  }
+
+  private meteorImpact(kid: number, x: number, z: number) {
+    const c = this.cfg.spells.meteor;
+    const by = this.kingdomById(kid);
+    let total = 0;
+    if (by) {
+      this.forNear(x, z, c.radius, (o) => {
+        const d = Math.hypot(o.x - x, o.z - z);
+        if (d > c.radius || !this.isEnemy(o, kid)) return;
+        const dmg = c.damage * (1 - 0.5 * (d / c.radius));
+        total += dmg;
+        o.burnUntil = this.t + c.burnSeconds;
+        o.dotKid = kid;
+        this.damageUnit(o, dmg, by, false);
+      });
+      for (const e of this.kingdoms) {
+        if (!e.alive || e.id === kid || this.shielded(e) || Math.hypot(e.x - x, e.z - z) > c.radius + 3) continue;
+        e.hp -= c.castleDamage;
+        total += c.castleDamage;
+        if (e.hp <= 0) this.fall(e, by);
+      }
+    }
+    this.emit({ k: "impact", x, z, r: c.radius, dmg: total });
   }
 
   // ---------------------------------------------------------------- dragon

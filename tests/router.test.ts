@@ -43,6 +43,16 @@ describe("gift tiers", () => {
     expect(troopsForValue(29999, cfg).dragon).toBe(true);
     expect(troopsForValue(29999, cfg).units.demon).toBe(5);
   });
+
+  it("attaches a spell to the bigger tiers", () => {
+    expect(troopsForValue(5, cfg).spells).toEqual([]);
+    expect(troopsForValue(20, cfg).spells).toEqual(["rage"]);
+    expect(troopsForValue(30, cfg).spells).toEqual(["heal"]);
+    expect(troopsForValue(50, cfg).spells).toEqual(["poison"]);
+    expect(troopsForValue(80, cfg).spells).toEqual(["lightning"]);
+    expect(troopsForValue(99, cfg).spells).toEqual(["frost"]);
+    expect(troopsForValue(299, cfg).spells).toEqual(["meteor"]);
+  });
 });
 
 describe("live router", () => {

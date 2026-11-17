@@ -2,7 +2,7 @@
 // Pure logic on top of Sim so it can be tested headless.
 import raw from "../../../config/events.config.json";
 import type { NormalizedLiveEvent } from "../../../shared/contract";
-import { UNIT_ICON, UNIT_LABEL, type UnitBundle, type UnitType } from "../sim/config";
+import { SPELLS, UNIT_ICON, UNIT_LABEL, type SpellId, type UnitBundle, type UnitType } from "../sim/config";
 import type { Sim } from "../sim/world";
 
 export type EventsConfig = typeof raw;
@@ -28,10 +28,12 @@ interface Tier {
   perCoin?: Record<string, number>;
   castleLevel?: number;
   event?: string;
+  /** spell cast for the giver's kingdom on top of the troops */
+  spell?: string;
 }
 
 /** Turn a coin value into troops by walking the value tiers (highest first). */
-export function troopsForValue(value: number, cfg: EventsConfig): { units: UnitBundle; levels: number; dragon: boolean; leftover: number } {
+export function troopsForValue(value: number, cfg: EventsConfig): { units: UnitBundle; levels: number; dragon: boolean; leftover: number; spells: SpellId[] } {
   const tiers = [...(cfg.gift.valueTiers as Tier[])].sort((a, b) => b.minValue - a.minValue);
   const units: UnitBundle = {};
   const add = (b: Record<string, number>, mult = 1) => {
@@ -40,6 +42,7 @@ export function troopsForValue(value: number, cfg: EventsConfig): { units: UnitB
   let remaining = Math.max(0, Math.floor(value));
   let levels = 0;
   let dragon = false;
+  const spells: SpellId[] = [];
   for (let loop = 0; loop < cfg.gift.maxTierLoops && remaining > 0; loop++) {
     const tier = tiers.find((t) => remaining >= t.minValue);
     if (!tier) break;
@@ -51,9 +54,10 @@ export function troopsForValue(value: number, cfg: EventsConfig): { units: UnitB
     if (tier.units) add(tier.units);
     if (tier.castleLevel) levels += tier.castleLevel;
     if (tier.event === "WORLD_DRAGON") dragon = true;
+    if (tier.spell && (SPELLS as readonly string[]).includes(tier.spell)) spells.push(tier.spell as SpellId);
     remaining -= tier.minValue;
   }
-  return { units, levels, dragon, leftover: remaining };
+  return { units, levels, dragon, leftover: remaining, spells };
 }
 
 export function describeUnits(b: UnitBundle) {
@@ -173,6 +177,8 @@ export class LiveRouter {
     const r = this.sim.addUnits(key, name, units, reason, this.cfg.join.autoJoinOnGift);
     if (one.levels) this.sim.levelUp(key, one.levels * repeat);
     if (one.dragon) this.sim.summonDragon(key);
+    // a streak repeats the spell too, up to three casts per gift
+    for (let i = 0; i < Math.min(repeat, 3); i++) for (const s of one.spells) this.sim.castSpell(key, name, s);
     if (one.leftover > 0) this.sim.buff(key, this.cfg.gift.leftoverBuffSeconds);
     return r === "ignored" ? { status: "ignored", reason: "not_joined" } : { status: "applied", reason: r };
   }

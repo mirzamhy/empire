@@ -244,3 +244,80 @@ describe("villages and expansion", () => {
     expect(s.villages.every((v) => v.owner === 0)).toBe(true);
   });
 });
+
+describe("spells", () => {
+  const war = (seed = 3) => {
+    const s = mk(seed);
+    for (let i = 0; i < 6; i++) s.join(`p${i}`, `P${i}`);
+    s.nextPhase();
+    s.drainEvents();
+    return s;
+  };
+
+  it("ignores viewers without a kingdom and waits for the war", () => {
+    const s = mk();
+    s.join("budi", "Budi");
+    expect(s.castSpell("nobody", "Nobody", "heal")).toBe("ignored");
+    expect(s.castSpell("budi", "Budi", "rage")).toBe("queued");
+    run(s, 2);
+    expect(s.drainEvents().some((e) => e.k === "spell")).toBe(false);
+    s.nextPhase();
+    run(s, 1);
+    expect(s.drainEvents().some((e) => e.k === "spell" && e.spell === "rage")).toBe(true);
+    expect(s.kingdomByKey("budi")!.rageUntil).toBeGreaterThan(s.t);
+  });
+
+  it("spaces a kingdom's spells by the cooldown", () => {
+    const s = war();
+    s.castSpell("p0", "P0", "rage");
+    s.castSpell("p0", "P0", "heal");
+    run(s, 2);
+    expect(s.drainEvents().filter((e) => e.k === "spell").length).toBe(1);
+    run(s, s.cfg.spells.cooldownSeconds + 1);
+    expect(s.drainEvents().filter((e) => e.k === "spell").length).toBe(1);
+  });
+
+  it("meteors land after their delay and hurt enemies only", () => {
+    const s = war();
+    run(s, 40);
+    s.drainEvents();
+    const mine = s.kingdomByKey("p0")!;
+    s.castSpell("p0", "P0", "meteor");
+    const before = new Map(s.units.filter((u) => u.kid === mine.id).map((u) => [u.id, u.hp]));
+    let strikes = 0;
+    let impacts = 0;
+    for (let i = 0; i < 20 * 20 && impacts < s.cfg.spells.meteor.count; i++) {
+      s.step(0.05);
+      for (const e of s.drainEvents()) {
+        if (e.k === "strike") strikes++;
+        if (e.k === "impact") impacts++;
+      }
+    }
+    expect(strikes).toBe(s.cfg.spells.meteor.count);
+    expect(impacts).toBe(s.cfg.spells.meteor.count);
+    expect(s.units.some((u) => u.kid !== mine.id && u.burnUntil > 0)).toBe(true);
+    expect(s.units.every((u) => u.kid !== mine.id || u.burnUntil === 0)).toBe(true);
+    expect(before.size).toBeGreaterThan(0);
+  });
+
+  it("frost leaves a zone that chills enemies and then ends", () => {
+    const s = war();
+    run(s, 40);
+    s.castSpell("p1", "P1", "frost");
+    run(s, 3);
+    expect(s.zones.length).toBe(1);
+    const mine = s.kingdomByKey("p1")!.id;
+    expect(s.units.some((u) => u.kid !== mine && u.chillUntil > s.t)).toBe(true);
+    run(s, s.cfg.spells.frost.seconds + 9);
+    expect(s.zones.length).toBe(0);
+  });
+
+  it("a round without spells is unchanged by the spell system", () => {
+    const a = war(9);
+    const b = war(9);
+    run(a, 60);
+    run(b, 60);
+    expect(a.units.length).toBe(b.units.length);
+    expect(a.leaderboard().map((k) => k.name)).toEqual(b.leaderboard().map((k) => k.name));
+  });
+});
