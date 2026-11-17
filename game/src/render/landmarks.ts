@@ -7,7 +7,8 @@ import * as THREE from "three";
 import type { LandmarkKind } from "../sim/maps";
 import type { WorldMap } from "../sim/map";
 import { bakeGroup, instancedMaterial } from "./bake";
-import { box, cone, cyl, glow, ico, lambert, part, seg, taperBox } from "./units/models/kit";
+import { box, cone, cyl, glow, ico, lambert, part, ring, seg, taperBox } from "./units/models/kit";
+import { modelSet } from "./units/sets";
 
 const STONE = 0x8c8982;
 const STONE_DARK = 0x66635e;
@@ -218,8 +219,167 @@ function stoneCircle(): THREE.Group {
   return g;
 }
 
-/** Stone lighthouse on a headland. 14 m. */
+/**
+ * Medieval-fantasy lighthouse (v2): a buttressed stone tower in two stages with a stair turret,
+ * a corbelled and crenellated gallery, and a beacon crystal turning inside an armillary under a
+ * flared slate spire. A keeper's hut leans against the foot. 21 m to the pennant.
+ */
 function lighthouse(): THREE.Group {
+  const g = new THREE.Group();
+  const stone = lambert(0xa39d90);
+  const pale = lambert(STONE_PALE);
+  const dark = lambert(STONE_DARK);
+  const slate = lambert(0x33475c);
+  const slateDark = lambert(0x26364a);
+  const wood = lambert(WOOD);
+  const timber = lambert(0x3a2819);
+  const plaster = lambert(0xd9cfb4);
+  const iron = lambert(0x2a2622);
+  const gold = lambert(0xe2b93b);
+  const cloth = lambert(0x8c2f2a);
+  const moss = lambert(MOSS);
+  const lit = glow(0xffd98a);
+  const crystal = glow(0x8fe6ff);
+  const core = glow(0xf2fdff);
+  const TAU = Math.PI * 2;
+  /** a frame whose +Z points outward from the tower axis at angle a */
+  const at = (a: number) => {
+    const n = new THREE.Group();
+    n.rotation.y = a;
+    g.add(n);
+    return n;
+  };
+  /** wall radius of the tower at height y */
+  const wall = (y: number) => (y < 6.1 ? 2.6 - 0.45 * ((y - 1) / 5) : 2.1 - 0.3 * ((y - 6.2) / 5));
+
+  // headland rocks, a round plinth, steps up to the door
+  for (const [x, z, s] of [[0, 0, 3.6], [2.9, 1.3, 2.0], [-2.7, -1.5, 2.2], [1.1, -2.9, 1.7], [-2.4, 2.2, 1.4], [3.2, -1.6, 1.2]]) part(g, ico(s), dark, x, 0.2, z).scale.set(1.2, 0.45, 1.1);
+  part(g, cyl(3.0, 3.5, 1.0, 10), dark, 0, 0.5, 0);
+  for (let i = 0; i < 3; i++) part(g, box(1.7, 0.3, 0.6), pale, 0, 0.85 - i * 0.3, 3.05 + i * 0.55);
+
+  // tower: two stages, the upper one stepped in, with string courses
+  part(g, cyl(2.15, 2.6, 5.0, 10), stone, 0, 3.5, 0);
+  part(g, cyl(2.72, 2.72, 0.3, 10), pale, 0, 1.15, 0);
+  part(g, cyl(2.3, 2.3, 0.3, 10), pale, 0, 6.1, 0);
+  part(g, cyl(1.8, 2.1, 5.0, 10), stone, 0, 8.7, 0);
+  // odd blocks of paler and darker stone break the wall up; moss low down on the weather side
+  for (let i = 0; i < 16; i++) {
+    const y = 1.8 + ((i * 0.67) % 9);
+    part(at(i * 2.4), box(0.7, 0.4, 0.16), i % 3 ? pale : dark, 0, y, wall(y) - 0.03);
+  }
+  for (const [a, y, s] of [[2.0, 1.6, 0.9], [2.6, 2.3, 0.7], [3.3, 1.5, 0.8], [3.9, 2.8, 0.5]]) part(at(a), ico(s), moss, 0, y, wall(y) - 0.25).scale.set(1, 0.9, 0.5);
+  // four buttresses lean against the lower stage
+  for (let i = 0; i < 4; i++) {
+    const n = at(Math.PI / 4 + (i * Math.PI) / 2);
+    part(n, taperBox(0.9, 0.6, 5.2, 1.3, 0.5), dark, 0, 3.4, 2.55, -0.08);
+    part(n, taperBox(0.75, 0.5, 0.3, 0.7, 0.2), pale, 0, 6.05, 2.3, -0.4);
+  }
+
+  // door in a stone arch, iron bands, a lantern either side
+  const front = at(0);
+  part(front, box(1.5, 2.4, 0.5), dark, 0, 2.2, 2.42);
+  part(front, cyl(0.75, 0.75, 0.5, 8), dark, 0, 3.4, 2.42, Math.PI / 2);
+  part(front, box(1.0, 2.1, 0.2), wood, 0, 2.05, 2.66);
+  part(front, cyl(0.5, 0.5, 0.2, 8), wood, 0, 3.1, 2.66, Math.PI / 2);
+  for (const y of [1.6, 2.6]) part(front, box(1.0, 0.1, 0.06), iron, 0, y, 2.78);
+  part(front, ring(0.1, 0.025, 6), iron, 0.28, 2.1, 2.8);
+  part(front, box(0.5, 0.5, 0.08), gold, 0, 4.25, 2.5, 0, 0, Math.PI / 4); // sun emblem above the arch
+  for (const s of [-1, 1]) {
+    seg(front, iron, [s * 1.05, 3.3, 2.35], [s * 1.05, 3.3, 2.8], 0.04, 0.04, 4);
+    part(front, box(0.24, 0.32, 0.24), lit, s * 1.05, 3.0, 2.8);
+    part(front, cone(0.22, 0.2, 4), iron, s * 1.05, 3.26, 2.8, 0, Math.PI / 4);
+  }
+  // lit windows wind up the tower: slit, sill and lintel
+  for (let i = 0; i < 5; i++) {
+    const y = 3.4 + i * 1.6;
+    const n = at(0.9 + i * 1.3);
+    part(n, box(0.34, 1.0, 0.2), lit, 0, y, wall(y) - 0.04);
+    part(n, box(0.62, 0.16, 0.3), pale, 0, y - 0.58, wall(y));
+    part(n, taperBox(0.62, 0.2, 0.3, 0.3), pale, 0, y + 0.65, wall(y));
+  }
+  // two long banners hang below the gallery
+  for (const a of [-0.55, 0.55]) {
+    const n = at(a);
+    part(n, box(0.9, 0.1, 0.12), gold, 0, 10.6, 2.02);
+    part(n, box(0.8, 2.4, 0.06), cloth, 0, 9.35, 2.0, 0.03);
+    part(n, taperBox(0.02, 0.8, 0.5, 0.06), cloth, 0, 7.9, 2.04, 0.03);
+    part(n, box(0.3, 0.3, 0.08), gold, 0, 9.6, 2.03, 0.03, 0, Math.PI / 4);
+  }
+
+  // stair turret up the landward side, with its own little spire
+  const st = at(2.5);
+  part(st, cyl(0.85, 0.95, 10.6, 7), stone, 0, 6.3, 2.35);
+  part(st, cyl(1.05, 0.85, 0.3, 7), pale, 0, 11.75, 2.35);
+  part(st, cyl(1.0, 1.0, 0.9, 7), stone, 0, 12.35, 2.35);
+  part(st, cyl(1.05, 1.4, 0.3, 7), slateDark, 0, 12.95, 2.35);
+  part(st, cone(1.1, 2.4, 7), slate, 0, 14.3, 2.35);
+  part(st, ico(0.13), gold, 0, 15.55, 2.35);
+  for (const y of [4, 7, 10, 12.4]) part(st, box(0.2, 0.55, 0.15), lit, 0, y, 3.24);
+
+  // gallery: corbels, a stone deck, a crenellated parapet
+  part(g, cyl(2.9, 2.0, 0.7, 10), dark, 0, 11.5, 0);
+  for (let i = 0; i < 10; i++) part(at((i / 10) * TAU), box(0.35, 0.5, 0.6), pale, 0, 11.3, 2.35);
+  part(g, cyl(3.0, 3.0, 0.25, 10), pale, 0, 11.95, 0);
+  part(g, cyl(2.9, 2.9, 0.4, 10), stone, 0, 12.25, 0);
+  for (let i = 0; i < 10; i++) {
+    const n = at(((i + 0.5) / 10) * TAU);
+    part(n, box(0.95, 0.7, 0.3), stone, 0, 12.75, 2.72);
+    part(n, box(1.05, 0.12, 0.4), pale, 0, 13.15, 2.72);
+  }
+
+  // lantern: a stone drum, eight pillars joined by pointed arches
+  part(g, cyl(1.5, 1.7, 0.9, 8), stone, 0, 12.75, 0);
+  part(g, cyl(1.7, 1.7, 0.2, 8), pale, 0, 13.25, 0);
+  for (let i = 0; i < 8; i++) {
+    const n = at((i / 8) * TAU);
+    part(n, box(0.22, 2.3, 0.22), dark, 0, 14.4, 1.4);
+    part(n, box(0.3, 0.14, 0.3), pale, 0, 15.5, 1.4);
+    seg(n, dark, [0, 15.5, 1.4], [0.52, 16.05, 1.26], 0.08, 0.07, 4);
+    seg(n, dark, [0.52, 16.05, 1.26], [0.99, 15.5, 0.99], 0.07, 0.08, 4);
+  }
+  // the beacon: a crystal floating over an iron bowl, ringed by a golden armillary
+  part(g, cyl(0.9, 0.5, 0.4, 8), iron, 0, 13.55, 0);
+  part(g, cone(0.62, 1.3, 6), crystal, 0, 15.15, 0);
+  part(g, cone(0.62, 0.8, 6), crystal, 0, 14.1, 0, Math.PI);
+  part(g, ico(0.34), core, 0, 14.5, 0);
+  part(g, ring(1.0, 0.04, 12), gold, 0, 14.6, 0, Math.PI / 2 + 0.35, 0, 0);
+  part(g, ring(0.86, 0.035, 12), gold, 0, 14.6, 0, Math.PI / 2 - 0.4, 0.6, 0);
+  for (const [x, y, z] of [[0.75, 15.2, 0.2], [-0.5, 14.0, 0.6], [-0.2, 15.6, -0.7]]) part(g, cone(0.1, 0.3, 4), crystal, x, y, z);
+
+  // spire: flared slate "witch hat", four lit dormers, gold finial, pennant
+  part(g, cyl(1.6, 2.45, 0.55, 8), slateDark, 0, 16.3, 0);
+  part(g, cone(1.65, 3.7, 8), slate, 0, 18.4, 0);
+  for (let i = 0; i < 4; i++) {
+    const n = at(Math.PI / 8 + (i * Math.PI) / 2);
+    part(n, box(0.42, 0.5, 0.4), lit, 0, 17.05, 1.05);
+    part(n, taperBox(0.6, 0.1, 0.36, 0.56), slateDark, 0, 17.47, 1.05);
+  }
+  part(g, ico(0.2), gold, 0, 20.3, 0);
+  part(g, cyl(0.05, 0.05, 1.5, 5), iron, 0, 21.0, 0);
+  part(g, box(0.05, 0.45, 1.0), cloth, 0, 21.45, -0.52);
+  part(g, taperBox(0.05, 0.05, 0.45, 0.02, 0.5), cloth, 0, 21.45, -1.2, Math.PI / 2);
+
+  // keeper's hut against the foot: timber frame, slate gable, chimney, a lit window, barrels
+  const hut = new THREE.Group();
+  hut.position.set(3.5, 0.55, 1.2);
+  hut.rotation.y = 0.5;
+  g.add(hut);
+  part(hut, box(2.3, 1.7, 1.9), plaster, 0, 0.85, 0);
+  for (const s of [-1, 1]) {
+    part(hut, box(0.14, 1.7, 0.14), timber, s * 1.12, 0.85, 0.93);
+    part(hut, box(0.12, 1.9, 0.1), timber, s * 0.5, 0.85, 0.96, 0, 0, s * 0.5);
+  }
+  part(hut, box(2.4, 0.14, 0.14), timber, 0, 1.68, 0.93);
+  part(hut, taperBox(2.7, 2.7, 1.1, 2.3, 0.12), slate, 0, 2.25, 0);
+  part(hut, box(0.5, 1.1, 0.12), wood, -0.55, 0.55, 0.97);
+  part(hut, box(0.45, 0.45, 0.1), lit, 0.5, 1.0, 0.97);
+  part(hut, box(0.4, 1.5, 0.4), dark, 0.85, 2.5, -0.4);
+  for (const [x, z] of [[1.55, 0.6], [1.75, 0.05]]) part(hut, cyl(0.28, 0.25, 0.6, 7), wood, x, 0.3, z);
+  return g;
+}
+
+/** v1 (archive): the plain striped lighthouse from before the redesign. 14 m. Shown with ?models=v1. */
+function lighthouseV1(): THREE.Group {
   const g = new THREE.Group();
   const pale = lambert(0xc9c4b6);
   const dark = lambert(STONE_DARK);
@@ -238,7 +398,10 @@ function lighthouse(): THREE.Group {
   return g;
 }
 
-const BUILD: Record<LandmarkKind, () => THREE.Group> = { dragonBones, watchtower, ruins, greatTree, stoneCircle, lighthouse };
+const BUILD: Record<LandmarkKind, () => THREE.Group> = {
+  dragonBones, watchtower, ruins, greatTree, stoneCircle,
+  lighthouse: () => (modelSet() === "v1" ? lighthouseV1() : lighthouse()),
+};
 
 export class LandmarkRenderer {
   readonly group = new THREE.Group();
