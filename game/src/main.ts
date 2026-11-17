@@ -1,5 +1,7 @@
 // EMPIRE game entry: sim + renderers + HUD + live bridge.
-// URL flags: ?free (orbit camera), ?studio (unit model line-up), ?seed=N, ?demo=N (N mock kingdoms, no bridge needed).
+// URL flags: ?free (orbit camera), ?studio (unit model line-up), ?seed=N, ?demo=N (N mock kingdoms, no bridge needed),
+// ?map=1|2|3 (which map, see sim/maps.ts), ?veg=0.6 (thinner vegetation), ?atmo=0 (no mist, birds or particles),
+// ?trees=simple (plain trees on a map that has detailed ones).
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { SCHEMA_VERSION, validateCommand, type GameStatusMessage } from "../../shared/contract";

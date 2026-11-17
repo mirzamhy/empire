@@ -1,8 +1,13 @@
-// World map: biome grid from the reference image, elevation, walkability, spawn sampling
+// World map: biome grid of the active map (sim/maps.ts), elevation, walkability, spawn sampling
 // and BFS distance fields used for unit navigation. Pure TS, no rendering.
-import { MAP_H, MAP_ROWS, MAP_W } from "./mapdata";
+import { ACTIVE, type LandmarkKind } from "./maps";
 import { ridge, smoothstep, vnoise } from "./noise";
+import { BED_FLOOR, carveRivers, type River } from "./rivers";
 import type { Rng } from "./rng";
+
+const MAP_W = ACTIVE.w;
+const MAP_H = ACTIVE.h;
+const MAP_ROWS = ACTIVE.rows;
 
 export type Biome = "water" | "beach" | "plains" | "desert" | "forest" | "mountain";
 const CODE: Record<string, Biome> = { "~": "water", b: "beach", s: "plains", d: "desert", f: "forest", m: "mountain" };
@@ -23,7 +28,21 @@ export const WORLD_H = GRID_H * CELL;
 /** size of this world relative to the first EMPIRE map (576 m wide); cameras and fog scale with it */
 export const WORLD_SCALE = WORLD_W / 576;
 
+/** A landmark standing on the map: decoration with a name, never an obstacle. */
+export interface Landmark {
+  kind: LandmarkKind;
+  name: string;
+  x: number;
+  z: number;
+  /** footprint radius, metres */
+  r: number;
+  /** facing, radians */
+  rot: number;
+}
+
 export class WorldMap {
+  /** the map this world was built from (sim/maps.ts) */
+  readonly def = ACTIVE;
   readonly biome: Biome[] = [];
   /** height in metres per cell centre */
   readonly height: Float32Array;
@@ -33,6 +52,11 @@ export class WorldMap {
   /** cells where a castle may stand (main continent, flat, not forest edge rules) */
   readonly buildable: Uint8Array;
   readonly altar: { x: number; z: number };
+  /** rivers from source to mouth; they are shallow and never block movement */
+  readonly rivers: River[];
+  /** metres from each cell to the nearest river bank (<= 0 inside the channel, huge without rivers) */
+  readonly riverBank: Float32Array;
+  readonly landmarks: Landmark[] = [];
 
   constructor() {
     const n = GRID_W * GRID_H;
@@ -64,6 +88,20 @@ export class WorldMap {
       const inland = smoothstep(2, 10, distWater[i]);
       let hgt = Math.min(distWater[i], 8) * 0.14 + ripple;
       hgt += (vnoise(x / 22, y / 22) * 2.6 + vnoise(x / 8 + 40, y / 8) * 0.8) * inland;
+      if (ACTIVE.terrain === "classic") {
+        // the first map: dunes, a short swell at the foot of a range, then a tall jagged core
+        if (b === "desert") hgt += ridge(x / 9 + y / 30, y / 14) * 1.1 * inland;
+        if (b === "forest") hgt += 0.15;
+        if (b !== "mountain") hgt += (1 - smoothstep(0, 7, distMtn[i])) ** 2 * 3.2;
+        else {
+          const core = smoothstep(0, 13, distRock[i]);
+          hgt += 3.2 + 24 * core ** 1.1;
+          hgt += ridge(x / 13, y / 13) * 9 * (0.25 + core) + ridge(x / 5 + 17, y / 5) * 2.2 * (0.3 + core);
+          hgt += vnoise(x / 2.5, y / 2.5) * 1.2;
+        }
+        this.height[i] = hgt;
+        continue;
+      }
       if (b === "desert") hgt += ridge(x / 9 + y / 30, y / 14) * 0.7 * inland; // moor hummocks
       if (b === "forest") hgt += 0.15;
       // foothills: a long ramp of rolling hills leads up to every range (about 60 m wide, 9 m high)
@@ -109,12 +147,65 @@ export class WorldMap {
     }
     this.mainComponent = best;
 
+    // Rivers: valleys carved into the height field only. Biomes are untouched, so every river
+    // cell stays walkable and the navigation fields are the same with or without rivers.
+    const riv = carveRivers(`map${ACTIVE.id}`, ACTIVE.rivers, { w: GRID_W, h: GRID_H, cell: CELL, isWater: (i) => this.biome[i] === "water" }, this.height);
+    this.rivers = riv.rivers;
+    this.riverBank = riv.bank;
+
+    // Landmarks: each is moved to the nearest spot that suits it, then its ground is levelled.
+    for (const d of ACTIVE.landmarks) {
+      const cx = Math.floor(((d.at[0] + 1) / 2) * GRID_W);
+      const cy = Math.floor(((d.at[1] + 1) / 2) * GRID_H);
+      const rc = d.r / CELL;
+      let spot = -1;
+      let spotScore = Infinity;
+      for (let y = Math.max(0, cy - 30); y <= Math.min(GRID_H - 1, cy + 30); y++)
+        for (let x = Math.max(0, cx - 30); x <= Math.min(GRID_W - 1, cx + 30); x++) {
+          const i = y * GRID_W + x;
+          if (this.component[i] !== best || this.riverBank[i] < d.r + 5) continue;
+          const b = this.biome[i];
+          if (b === "water" || b === "mountain") continue;
+          if (d.on === "low" && (b === "beach" || distMtn[i] < rc + 6 || distWater[i] < rc + 2)) continue;
+          if (d.on === "foot" && (distMtn[i] < rc * 0.5 + 1 || distMtn[i] > rc + 8 || distWater[i] < rc + 2)) continue;
+          if (d.on === "shore" && (distWater[i] < 2 || distWater[i] > 5)) continue;
+          // close to the wanted point, and on ground that is not too uneven
+          let rough = 0;
+          for (const nb of this.neighbours4(i)) rough += Math.abs(this.height[nb] - this.height[i]);
+          const score = Math.hypot(x - cx, y - cy) + rough * 2;
+          if (score < spotScore) {
+            spotScore = score;
+            spot = i;
+          }
+        }
+      if (spot < 0) continue;
+      const c = this.cellCenter(spot);
+      // face the continent's middle, so the front is what the overview camera sees
+      this.landmarks.push({ kind: d.kind, name: d.name, x: c.x, z: c.z, r: d.r, rot: Math.atan2(-c.x, -c.z) });
+      const level = this.height[spot];
+      const reach = Math.ceil(rc * 1.6);
+      const sx = spot % GRID_W;
+      const sy = (spot / GRID_W) | 0;
+      for (let y = Math.max(0, sy - reach); y <= Math.min(GRID_H - 1, sy + reach); y++)
+        for (let x = Math.max(0, sx - reach); x <= Math.min(GRID_W - 1, sx + reach); x++) {
+          const i = y * GRID_W + x;
+          if (this.biome[i] === "water") continue;
+          const t = smoothstep(rc * 0.8, rc * 1.6, Math.hypot(x - sx, y - sy));
+          this.height[i] = level + (this.height[i] - level) * t;
+        }
+    }
+
+    // castles stand on the lowlands, not on the foothill slopes (the first map had no foothills)
+    const mtnClear = ACTIVE.terrain === "classic" ? 2 : 8;
     for (let i = 0; i < n; i++) {
       const b = this.biome[i];
       if (this.component[i] !== best) continue;
       if (b === "water" || b === "mountain" || b === "beach") continue;
-      // castles stand on the lowlands, not on the foothill slopes
-      if (distMtn[i] < 8 || distWater[i] < 3) continue;
+      if (distMtn[i] < mtnClear || distWater[i] < 3) continue;
+      // nor in a river or on a landmark
+      if (this.riverBank[i] < 2 * CELL) continue;
+      const p = this.cellCenter(i);
+      if (this.landmarks.some((l) => Math.hypot(l.x - p.x, l.z - p.z) < l.r + 4)) continue;
       this.buildable[i] = 1;
     }
 
@@ -131,7 +222,7 @@ export class WorldMap {
     const cz = sz / cnt;
     let altarCell = 0;
     let altarD = Infinity;
-    for (let i = 0; i < n; i++) if (this.buildable[i] && distMtn[i] >= 6 && distWater[i] >= 7) {
+    for (let i = 0; i < n; i++) if (this.buildable[i] && distMtn[i] >= 6 && distWater[i] >= 7 && this.riverBank[i] > 16) {
       const d = (i % GRID_W - cx) ** 2 + (((i / GRID_W) | 0) - cz) ** 2;
       if (d < altarD) {
         altarD = d;
@@ -212,7 +303,31 @@ export class WorldMap {
     const h = this.height;
     const a = h[z0 * GRID_W + x0] * (1 - tx) + h[z0 * GRID_W + x1] * tx;
     const b = h[z1 * GRID_W + x0] * (1 - tx) + h[z1 * GRID_W + x1] * tx;
-    return Math.max(0, a * (1 - tz) + b * tz);
+    // the shore never dips under the sea, but a river bed near its mouth lies below lake level
+    // (the floor eases from 0 to the bed depth across the bank, so the ground has no step in it)
+    let floor = 0;
+    if (this.rivers.length) {
+      const r = this.riverBank;
+      const near = (i: number) => Math.min(r[i], 8);
+      const ra = near(z0 * GRID_W + x0) * (1 - tx) + near(z0 * GRID_W + x1) * tx;
+      const rb = near(z1 * GRID_W + x0) * (1 - tx) + near(z1 * GRID_W + x1) * tx;
+      floor = BED_FLOOR * (1 - smoothstep(0.5, 5, ra * (1 - tz) + rb * tz));
+    }
+    return Math.max(floor, a * (1 - tz) + b * tz);
+  }
+
+  /** Nearest landmark within `within` metres of a point, for naming where something happens. */
+  landmarkNear(x: number, z: number, within = 45): Landmark | null {
+    let best: Landmark | null = null;
+    let bestD = within;
+    for (const l of this.landmarks) {
+      const d = Math.hypot(l.x - x, l.z - z) - l.r;
+      if (d < bestD) {
+        bestD = d;
+        best = l;
+      }
+    }
+    return best;
   }
 
   /** Movement speed factor for a biome. */
