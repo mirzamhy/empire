@@ -23,6 +23,7 @@
       { "minValue": 150, "units": { "elephant": 1 } },
       { "minValue": 120, "units": { "ballista": 2 } },
       { "minValue": 99, "units": { "golem": 1, "necromancer": 2 } },
+      { "minValue": 80, "units": { "griffin": 2 } },
       { "minValue": 50, "units": { "assassin": 3 } },
       { "minValue": 30, "units": { "wizard": 3, "paladin": 2 } },
       { "minValue": 20, "units": { "berserker": 3 } },

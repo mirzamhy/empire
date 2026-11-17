@@ -21,8 +21,11 @@ export interface Clip {
   tracks: Partial<Record<BoneName, Track>>;
 }
 
-/** ambient = a loop that always plays on top (demon wings); fly replaces idle and walk. */
-export type ClipName = "idle" | "walk" | "attack" | "fly" | "ambient";
+/**
+ * ambient = a loop that always plays on top (demon wings); fly replaces idle and walk.
+ * death plays once on a corpse, on top of the idle pose (the fall itself is in death.ts).
+ */
+export type ClipName = "idle" | "walk" | "attack" | "fly" | "ambient" | "death";
 
 /** Keys for a + amp * sin(2π t / period) on one axis, nine per cycle (close to a true sine). */
 function sine(period: number, axis: 0 | 1 | 2, amp: number, base: [number, number, number] = [0, 0, 0], phase = 0): Key[] {
@@ -331,6 +334,144 @@ const trebuchetLaunch: Clip = {
   },
 };
 
+// ---------------------------------------------------------------- death clips
+// Limbs only: the body toppling over, chunks flying apart and the sink into the ground are
+// root-level motion in death.ts. Every clip starts from the idle pose so nothing pops.
+const DEATH = 1.2;
+const humanDeath: Clip = {
+  length: DEATH,
+  loop: false,
+  tracks: {
+    armR: { rot: [k(0, IDLE_R), [0.25, -1.9, 0, -0.9], [0.6, -2.7, 0, -1.2], [DEATH, -2.8, 0, -1.25]] },
+    armL: { rot: [k(0, IDLE_L), [0.25, -1.7, 0, 0.9], [0.6, -2.5, 0, 1.3], [DEATH, -2.6, 0, 1.35]] },
+    forearmR: { rot: [[0, 0, 0, 0], [0.4, -0.5, 0, 0], [DEATH, -0.3, 0, 0]] },
+    forearmL: { rot: [[0, 0, 0, 0], [0.4, -0.6, 0, 0], [DEATH, -0.4, 0, 0]] },
+    weapon: { rot: [[0, 0, 0, 0], [0.5, 0.9, 0, 0.6], [DEATH, 1.2, 0, 0.8]] },
+    spine: { rot: [[0, 0, 0, 0], [0.2, -0.3, 0.1, 0], [0.6, -0.1, 0.05, 0], [DEATH, 0, 0, 0]] },
+    head: { rot: [[0, 0, 0, 0], [0.2, -0.4, 0, 0], [0.6, 0.15, 0.3, 0], [DEATH, 0.1, 0.35, 0]] },
+    legR: { rot: [[0, 0, 0, -0.04], [0.3, -0.5, 0, -0.15], [0.7, -0.2, 0, -0.25], [DEATH, -0.15, 0, -0.25]] },
+    legL: { rot: [[0, 0, 0, 0.04], [0.3, 0.3, 0, 0.1], [0.7, 0.1, 0, 0.2], [DEATH, 0.05, 0, 0.2]] },
+  },
+};
+// Horse goes down on its side with the legs kicking out; the rider is thrown off the saddle.
+const riderDeath: Clip = {
+  length: DEATH,
+  loop: false,
+  tracks: {
+    legFR: { rot: [[0, 0, 0, 0], [0.25, -0.9, 0, 0], [0.6, -0.4, 0, 0], [DEATH, -0.55, 0, 0]] },
+    legFL: { rot: [[0, 0, 0, 0], [0.3, -0.5, 0, 0], [0.7, -0.8, 0, 0], [DEATH, -0.7, 0, 0]] },
+    legBR: { rot: [[0, 0, 0, 0], [0.25, 0.8, 0, 0], [0.6, 0.4, 0, 0], [DEATH, 0.5, 0, 0]] },
+    legBL: { rot: [[0, 0, 0, 0], [0.3, 0.5, 0, 0], [0.7, 0.75, 0, 0], [DEATH, 0.65, 0, 0]] },
+    neck: { rot: [[0, 0, 0, 0], [0.3, -0.5, 0, 0], [0.7, 0.3, 0, 0], [DEATH, 0.25, 0, 0]] },
+    tail: { rot: [[0, 0, 0, 0], [0.4, 0.6, 0, 0], [DEATH, 0.3, 0, 0]] },
+    spine: {
+      pos: [[0, 0, 0, 0], [0.3, 0, 0.7, -0.1], [0.65, 0, 1.5, -0.3], [DEATH, 0, 1.7, -0.35]],
+      rot: [[0, 0, 0, 0], [0.3, -0.5, 0, 0.3], [0.65, -1.2, 0, 0.5], [DEATH, -1.4, 0, 0.5]],
+    },
+    armR: { rot: [[0, -0.35, 0, 0], [0.3, -2.2, 0, -0.6], [DEATH, -2.6, 0, -0.9]] },
+    armL: { rot: [[0, 0, 0, 0], [0.3, -1.8, 0, 0.7], [DEATH, -2.4, 0, 1.0]] },
+  },
+};
+const elephantDeath: Clip = {
+  length: 1.6,
+  loop: false,
+  tracks: {
+    head: { rot: [[0, 0, 0, 0], [0.3, -0.35, 0, 0], [0.9, 0.3, 0, 0.15], [1.6, 0.25, 0, 0.15]] },
+    trunk1: { rot: [[0, 0, 0, 0], [0.3, -1.1, 0, 0], [0.9, 0.3, 0, 0], [1.6, 0.2, 0, 0]] },
+    trunk2: { rot: [[0, 0, 0, 0], [0.35, -1.3, 0, 0], [1.0, 0.5, 0, 0], [1.6, 0.4, 0, 0]] },
+    legFR: { rot: [[0, 0, 0, 0], [0.5, -0.6, 0, 0], [1.6, -0.4, 0, 0]] },
+    legFL: { rot: [[0, 0, 0, 0], [0.6, -0.3, 0, 0], [1.6, -0.5, 0, 0]] },
+    legBR: { rot: [[0, 0, 0, 0], [0.5, 0.5, 0, 0], [1.6, 0.35, 0, 0]] },
+    legBL: { rot: [[0, 0, 0, 0], [0.6, 0.3, 0, 0], [1.6, 0.45, 0, 0]] },
+    tail: { rot: [[0, 0, 0, 0], [1.6, 0, 0, 0.4]] },
+  },
+};
+// Shot out of the sky: wings crumple, neck and tail go limp, jaw hangs open.
+const dragonDeath: Clip = {
+  length: DEATH,
+  loop: false,
+  tracks: {
+    wingR: { rot: [[0, 0, 0, 0], [0.25, 0, 0, -0.75], [0.7, 0, 0.3, -0.5], [DEATH, 0, 0.35, 0.25]] },
+    wingL: { rot: [[0, 0, 0, 0], [0.25, 0, 0, 0.75], [0.7, 0, -0.3, 0.5], [DEATH, 0, -0.35, -0.25]] },
+    wingR2: { rot: [[0, 0, 0, 0], [0.3, 0, 0, -0.6], [DEATH, 0, 0, 0.5]] },
+    wingL2: { rot: [[0, 0, 0, 0], [0.3, 0, 0, 0.6], [DEATH, 0, 0, -0.5]] },
+    neck1: { rot: [[0, 0, 0, 0], [0.3, -0.4, 0.2, 0], [0.75, 0.5, 0.3, 0], [DEATH, 0.45, 0.3, 0]] },
+    neck2: { rot: [[0, 0, 0, 0], [0.3, -0.3, 0, 0], [0.75, 0.3, 0.2, 0], [DEATH, 0.3, 0.2, 0]] },
+    head: { rot: [[0, 0, 0, 0], [0.75, 0.2, 0.2, 0.3], [DEATH, 0.2, 0.2, 0.35]] },
+    jaw: { rot: [[0, 0, 0, 0], [0.2, 0.6, 0, 0], [DEATH, 0.4, 0, 0]] },
+    tail1: { rot: [[0, 0, 0, 0], [0.4, -0.3, 0.2, 0], [DEATH, 0.1, 0.3, 0]] },
+    tail2: { rot: [[0, 0, 0, 0], [0.5, -0.3, 0.3, 0], [DEATH, 0.1, 0.4, 0]] },
+    tail3: { rot: [[0, 0, 0, 0], [0.6, -0.3, 0.3, 0], [DEATH, 0.1, 0.5, 0]] },
+    legR: { rot: [[0, 0.5, 0, 0], [DEATH, 1.0, 0, 0.2]] },
+    legL: { rot: [[0, 0.5, 0, 0], [DEATH, 0.9, 0, -0.2]] },
+  },
+};
+// Demon sinks to its knees with the head bowed; death.ts then burns it away.
+const demonDeath: Clip = {
+  length: 0.8,
+  loop: false,
+  tracks: {
+    hips: { pos: [[0, 0, 0, 0], [0.45, 0, -1.0, 0.1], [0.8, 0, -1.1, 0.1]] },
+    legR: { rot: [[0, 0, 0, -0.04], [0.45, 1.25, 0, -0.1], [0.8, 1.35, 0, -0.1]] },
+    legL: { rot: [[0, 0, 0, 0.04], [0.45, 1.2, 0, 0.1], [0.8, 1.35, 0, 0.1]] },
+    spine: { rot: [[0, 0, 0, 0], [0.2, -0.2, 0, 0], [0.8, 0.55, 0, 0]] },
+    head: { rot: [[0, 0, 0, 0], [0.25, -0.3, 0, 0], [0.8, 0.5, 0, 0]] },
+    armR: { rot: [k(0, IDLE_R), [0.3, -0.9, 0, -0.5], [0.8, 0.1, 0, -0.3]] },
+    armL: { rot: [k(0, IDLE_L), [0.3, -0.9, 0, 0.5], [0.8, 0.1, 0, 0.3]] },
+    wingR: { rot: [[0, 0, 0, 0], [0.3, 0, -0.4, 0], [0.8, 0.3, 0.5, 0]] },
+    wingL: { rot: [[0, 0, 0, 0], [0.3, 0, 0.4, 0], [0.8, 0.3, -0.5, 0]] },
+  },
+};
+
+// Griffin: the dragon's wing beat with the eagle fore legs tucked and the rider leaning in.
+const griffinFly: Clip = {
+  length: WING_FLAP,
+  loop: true,
+  tracks: {
+    ...dragon.fly!.tracks,
+    legFR: { rot: [[0, -0.75, 0, 0], [WING_FLAP, -0.75, 0, 0]] },
+    legFL: { rot: [[0, -0.75, 0, 0], [WING_FLAP, -0.75, 0, 0]] },
+    armR: { rot: [[0, -0.5, 0, 0], [WING_FLAP, -0.5, 0, 0]] },
+    spine: { rot: sine(WING_FLAP, 0, 0.04, [0.15, 0, 0], 0.4) },
+  },
+};
+// Swoop: wings flare back, the body pitches down, talons rake forward, the beak pecks and the
+// rider drives the lance down. (The dive itself is root motion in units.ts.)
+const swoop: Clip = {
+  length: 0.6,
+  loop: false,
+  tracks: {
+    body: { rot: [[0, 0.3, 0, 0], [0.1, 0.5, 0, 0], [0.35, 0.25, 0, 0], [0.6, 0, 0, 0]] },
+    wingR: { rot: [[0, 0, 0.5, -0.7], [0.12, 0, 0.6, -0.5], [0.4, 0, 0.2, 0.3], [0.6, 0, 0, 0]] },
+    wingL: { rot: [[0, 0, -0.5, 0.7], [0.12, 0, -0.6, 0.5], [0.4, 0, -0.2, -0.3], [0.6, 0, 0, 0]] },
+    wingR2: { rot: [[0, 0, 0.3, -0.4], [0.4, 0, 0, 0.2], [0.6, 0, 0, 0]] },
+    wingL2: { rot: [[0, 0, -0.3, 0.4], [0.4, 0, 0, -0.2], [0.6, 0, 0, 0]] },
+    legFR: { rot: [[0, -1.5, 0, 0], [0.09, -0.5, 0, 0], [0.3, -0.9, 0, 0], [0.6, -0.75, 0, 0]] },
+    legFL: { rot: [[0, -1.3, 0, 0], [0.13, -0.4, 0, 0], [0.3, -0.9, 0, 0], [0.6, -0.75, 0, 0]] },
+    neck1: { rot: [[0, -0.25, 0, 0], [0.1, 0.5, 0, 0], [0.3, 0.3, 0, 0], [0.6, 0, 0, 0]] },
+    head: { rot: [[0, -0.2, 0, 0], [0.1, 0.4, 0, 0], [0.6, 0, 0, 0]] },
+    armR: { rot: [[0, -1.6, 0, -0.2], [0.1, -0.7, 0, 0], [0.3, -0.6, 0, 0], [0.6, -0.5, 0, 0]] },
+    weapon: { rot: [[0, 0.3, 0, 0], [0.1, 0.8, 0, 0], [0.3, 0.7, 0, 0], [0.6, 0, 0, 0]] },
+    tail1: { rot: [[0, -0.4, 0, 0], [0.2, 0.3, 0, 0], [0.6, 0, 0, 0]] },
+  },
+};
+// Falls out of the sky like a dragon; the rider is thrown clear.
+const griffinDeath: Clip = {
+  length: DEATH,
+  loop: false,
+  tracks: {
+    ...dragonDeath.tracks,
+    legFR: { rot: [[0, -0.75, 0, 0], [0.4, 0.3, 0, 0.2], [DEATH, -0.3, 0, 0.3]] },
+    legFL: { rot: [[0, -0.75, 0, 0], [0.5, 0.2, 0, -0.2], [DEATH, -0.4, 0, -0.3]] },
+    spine: {
+      pos: [[0, 0, 0, 0], [0.3, 0, 0.6, -0.2], [0.7, 0, 1.2, -0.6], [DEATH, 0, 1.3, -0.7]],
+      rot: [[0, 0.15, 0, 0], [0.3, -0.6, 0, 0.3], [0.7, -1.3, 0, 0.5], [DEATH, -1.5, 0, 0.5]],
+    },
+    armR: { rot: [[0, -0.5, 0, 0], [0.3, -2.2, 0, -0.6], [DEATH, -2.6, 0, -0.9]] },
+    weapon: { rot: [[0, 0, 0, 0], [0.5, 0.8, 0, 0.5], [DEATH, 1.0, 0, 0.7]] },
+  },
+};
+
 const WING_IDLE = 2.6;
 const demonWings: Clip = {
   length: WING_IDLE,
@@ -347,16 +488,17 @@ const TYPE_CLIPS: Partial<Record<UnitType, Partial<Record<ClipName, Clip>>>> = {
   necromancer: { attack: cast },
   paladin: { attack: slam },
   golem: { attack: punch },
-  demon: { attack: cleave, ambient: demonWings },
+  demon: { attack: cleave, ambient: demonWings, death: demonDeath },
   cavalry: { attack: charge },
   halberdier: { attack: chop },
   shieldbearer: { attack: bash },
   berserker: { attack: frenzy },
   assassin: { attack: backstab },
   engineer: { attack: hammer },
-  elephant: { attack: gore, walk: elephantWalk, ambient: elephantIdle },
+  elephant: { attack: gore, walk: elephantWalk, ambient: elephantIdle, death: elephantDeath },
   ballista: { attack: ballistaFire, walk: siegeMove },
   trebuchet: { attack: trebuchetLaunch, walk: siegeMove },
+  griffin: { fly: griffinFly, attack: swoop, death: griffinDeath },
 };
 
 /** The clip a unit type plays: its own when it has one, else the default of its rig. */
@@ -365,11 +507,12 @@ export function clipFor(type: UnitType, rig: RigKind, name: ClipName): Clip | un
 }
 
 export const CLIPS: Record<RigKind, Partial<Record<ClipName, Clip>>> = {
-  humanoid,
+  humanoid: { ...humanoid, death: humanDeath },
+  // golems shatter instead of falling (death.ts), so they have no death clip
   golem: humanoid,
-  rider,
-  quadruped: rider,
-  dragon,
+  rider: { ...rider, death: riderDeath },
+  quadruped: { ...rider, death: riderDeath },
+  dragon: { ...dragon, death: dragonDeath },
   siege: {},
 };
 

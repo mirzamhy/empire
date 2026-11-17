@@ -116,7 +116,8 @@ export type SimEvent =
   | { k: "shot"; fromX: number; fromZ: number; x: number; z: number; type: UnitType | "tower" | "dragon"; dmg: number; on: HitTarget; id?: number }
   /** melee blow landed (ranged hits land when their shot arrives) */
   | { k: "hit"; fromX: number; fromZ: number; x: number; z: number; type: UnitType; dmg: number; on: HitTarget }
-  | { k: "death"; x: number; z: number; kid: number; type: UnitType }
+  /** id and heading let the renderer leave a corpse; they do not affect the sim */
+  | { k: "death"; x: number; z: number; kid: number; type: UnitType; id: number; heading: number }
   | { k: "dragon"; state: "spawn" | "dead"; by: number | null }
   /** a village changed hands (prev 0 = it was neutral) */
   | { k: "village"; id: number; kid: number; prev: number }
@@ -702,7 +703,7 @@ export class Sim {
     k.hp = 0;
     for (const u of this.units) if (u.alive && u.kid === k.id) {
       u.alive = false;
-      this.emit({ k: "death", x: u.x, z: u.z, kid: u.kid, type: u.type });
+      this.emit({ k: "death", x: u.x, z: u.z, kid: u.kid, type: u.type, id: u.id, heading: u.heading });
     }
     k.unitCount = 0;
     k.passiveCount = 0;
@@ -1189,7 +1190,7 @@ export class Sim {
       owner.unitCount = Math.max(0, owner.unitCount - 1);
       if (target.passive) owner.passiveCount = Math.max(0, owner.passiveCount - 1);
     }
-    this.emit({ k: "death", x: target.x, z: target.z, kid: target.kid, type: target.type });
+    this.emit({ k: "death", x: target.x, z: target.z, kid: target.kid, type: target.type, id: target.id, heading: target.heading });
     by.kills++;
     const ec = this.cfg.exp;
     this.gainExp(by, ec.killBase + target.maxHp * ec.killPerMaxHp);
@@ -1252,7 +1253,7 @@ export class Sim {
           owner.unitCount = Math.max(0, owner.unitCount - 1);
           if (o.passive) owner.passiveCount = Math.max(0, owner.passiveCount - 1);
         }
-        this.emit({ k: "death", x: o.x, z: o.z, kid: o.kid, type: o.type });
+        this.emit({ k: "death", x: o.x, z: o.z, kid: o.kid, type: o.type, id: o.id, heading: o.heading });
       }
     });
   }

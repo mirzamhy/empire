@@ -2,7 +2,8 @@
 // turns sim state into a pose: one rotation and one offset per bone.
 //
 // V0 states: idle, walk (blended over ~0.1 s) and attack (overlay on the bones its clip names).
-// V2 adds spawn, run, hit, death and cheer on top of the same records.
+// Corpses are posed with poseDeath(); they have no per-unit record.
+// V2 adds spawn, run, hit and cheer on top of the same records.
 import type { Unit } from "../../sim/world";
 import { clipFor, sampleKeys, type Clip, type ClipName } from "./anims";
 import type { BakedRig } from "./rig";
@@ -84,6 +85,18 @@ export class Animator {
       const w = Math.min(1, (attack.length - since) / (attack.length * 0.25));
       this.apply(rig, attack, since, w, out);
     }
+  }
+
+  /**
+   * Pose of a corpse `age` seconds after death: the idle stance with the death clip on top.
+   * Types without a death clip (they shatter instead) just keep the idle stance.
+   */
+  poseDeath(rig: BakedRig, age: number, out: Float32Array) {
+    out.fill(0, 0, rig.bones.length * POSE_STRIDE);
+    const idle = clipFor(rig.type, rig.rig, "idle");
+    if (idle) this.apply(rig, idle, 0, 1, out);
+    const death = clipFor(rig.type, rig.rig, "death");
+    if (death) this.apply(rig, death, age, 1, out);
   }
 
   /** Blend a clip into the pose with weight w (bones the clip does not name are left alone). */

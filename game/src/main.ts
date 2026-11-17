@@ -6,7 +6,7 @@ import { SCHEMA_VERSION, validateCommand, type GameStatusMessage } from "../../s
 import { BridgeClient } from "./net/bridgeClient";
 import { LiveRouter, type RouteResult } from "./live/router";
 import { loadConfig, UNIT_TYPES } from "./sim/config";
-import { WorldMap } from "./sim/map";
+import { WORLD_SCALE, WorldMap } from "./sim/map";
 import { Sim } from "./sim/world";
 import { Atmosphere } from "./render/atmosphere";
 import { buildTerrain } from "./render/terrain";
@@ -23,7 +23,7 @@ const params = new URLSearchParams(location.search);
 const app = document.getElementById("app")!;
 const view = createScene(app);
 const map = new WorldMap();
-const terrain = buildTerrain(map);
+const terrain = buildTerrain(map, Math.min(1.5, Math.max(0.2, Number(params.get("veg")) || 1)));
 view.scene.add(terrain.group);
 
 const sim = new Sim(loadConfig(), map, Number(params.get("seed") ?? (Date.now() & 0xffff)));
@@ -49,7 +49,7 @@ if (studio || params.has("free")) {
   director.enabled = false;
   controls = new OrbitControls(view.camera, view.renderer.domElement);
   controls.target.set(0, 0, 0);
-  view.camera.position.set(0, 400, 290);
+  view.camera.position.set(0, 400 * WORLD_SCALE, 290 * WORLD_SCALE);
   controls.update();
 }
 
@@ -161,6 +161,7 @@ function dispatch(now: number) {
   for (const e of sim.drainEvents()) {
     hud?.onEvent(e);
     fx.onEvent(e, now, sim);
+    if (e.k === "death") units.addCorpse(sim, e, now);
     director.onEvent(e, sim, now);
   }
 }

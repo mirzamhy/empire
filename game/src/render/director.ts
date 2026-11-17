@@ -1,7 +1,7 @@
 // Auto-director camera for the portrait stream: overview, gift senders, falling castles,
 // new kingdoms, the dragon and the biggest battle. One shot at a time, with priorities.
 import * as THREE from "three";
-import type { WorldMap } from "../sim/map";
+import { WORLD_SCALE, type WorldMap } from "../sim/map";
 import type { Sim, SimEvent } from "../sim/world";
 
 interface Shot {
@@ -71,7 +71,7 @@ export class Director {
   private idle(sim: Sim, now: number) {
     if (sim.phase === "LOBBY" || sim.phase === "RESULT" || now - this.lastOverview > 40 || sim.alive.length === 0) {
       this.lastOverview = now;
-      this.propose({ x: 0, z: 0, dist: 420, priority: 5, label: "overview", seconds: sim.phase === "WAR" || sim.phase === "FINAL" ? 6 : 8 }, now);
+      this.propose({ x: 0, z: 0, dist: 420 * WORLD_SCALE, priority: 5, label: "overview", seconds: sim.phase === "WAR" || sim.phase === "FINAL" ? 6 : 8 }, now);
       return;
     }
     if (sim.dragon && Math.random() < 0.35) {

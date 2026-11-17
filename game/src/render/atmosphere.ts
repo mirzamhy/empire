@@ -1,11 +1,14 @@
 // Mood per round phase (docs/rencana-visual.md 9.2): sun colour and direction, sky gradient, fog
 // and cloud shadows blend toward the preset of the current phase over a few seconds.
-//   LOBBY  = morning, low sun from the east, pale golden haze
-//   WAR    = midday, clear and neutral (best readability)
-//   FINAL  = late afternoon, low orange sun from the west
+// The world is a dark, wooded continent, so every mood is a shade darker and cooler than daylight:
+// the ground stays deep green and the kingdom colours of troops and castles stand out against it.
+//   LOBBY  = misty dawn, low sun from the east
+//   WAR    = overcast noon under heavy cloud (the sun still gives shape to units and peaks)
+//   FINAL  = low red sun from the west, long shadows
 //   RESULT = dusk, violet and dark
 import * as THREE from "three";
 import type { Phase } from "../sim/world";
+import { WORLD_SCALE } from "../sim/map";
 import type { SceneHandles } from "./scene";
 
 interface Mood {
@@ -24,10 +27,10 @@ interface Mood {
 }
 
 const MOODS: Record<Phase, Mood> = {
-  LOBBY: { sun: 0xffe2b0, sunPower: 1.25, sunFrom: [190, 150, 70], skyLight: 0xffeed8, groundLight: 0x4a5540, ambient: 0.9, rim: 0.3, fog: 0x9fbfc4, skyTop: 0x4f8fb5, cloud: 0.2, exposure: 1.0 },
-  WAR: { sun: 0xfff1d6, sunPower: 1.4, sunFrom: [110, 220, 95], skyLight: 0xfff4dc, groundLight: 0x3a4a3f, ambient: 0.95, rim: 0.3, fog: 0x6fa6ba, skyTop: 0x2f6fa5, cloud: 0.22, exposure: 1.0 },
-  FINAL: { sun: 0xff9b5a, sunPower: 1.45, sunFrom: [-200, 120, 60], skyLight: 0xffc9a0, groundLight: 0x3b2f45, ambient: 0.8, rim: 0.4, fog: 0xc58a6e, skyTop: 0x5a4a8f, cloud: 0.3, exposure: 1.05 },
-  RESULT: { sun: 0xc58cff, sunPower: 0.85, sunFrom: [-90, 150, -130], skyLight: 0x8f8fd0, groundLight: 0x1f1a33, ambient: 0.75, rim: 0.5, fog: 0x2f2850, skyTop: 0x14102e, cloud: 0.1, exposure: 1.0 },
+  LOBBY: { sun: 0xffd6a0, sunPower: 1.1, sunFrom: [190, 130, 70], skyLight: 0xd9e2d2, groundLight: 0x2c3a30, ambient: 0.68, rim: 0.3, fog: 0x6f8c88, skyTop: 0x35596c, cloud: 0.3, exposure: 0.96 },
+  WAR: { sun: 0xf4ead6, sunPower: 1.25, sunFrom: [120, 200, 95], skyLight: 0xcddacd, groundLight: 0x26342c, ambient: 0.7, rim: 0.32, fog: 0x4a6a6e, skyTop: 0x27485c, cloud: 0.38, exposure: 0.96 },
+  FINAL: { sun: 0xff8648, sunPower: 1.35, sunFrom: [-200, 110, 60], skyLight: 0xdfa684, groundLight: 0x2c2236, ambient: 0.58, rim: 0.4, fog: 0x86564a, skyTop: 0x372c5e, cloud: 0.36, exposure: 1.0 },
+  RESULT: { sun: 0xb58cf0, sunPower: 0.8, sunFrom: [-90, 150, -130], skyLight: 0x8080c0, groundLight: 0x18142a, ambient: 0.62, rim: 0.5, fog: 0x231f3e, skyTop: 0x0f0c24, cloud: 0.1, exposure: 0.98 },
 };
 
 export class Atmosphere {
@@ -51,7 +54,7 @@ export class Atmosphere {
       fragmentShader:
         "uniform vec3 top;\nuniform vec3 horizon;\nvarying vec3 vDir;\nvoid main() {\n  float h = normalize(vDir).y;\n  gl_FragColor = vec4(mix(horizon, top, smoothstep(0.0, 0.5, h)), 1.0);\n  #include <colorspace_fragment>\n}",
     });
-    this.sky = new THREE.Mesh(new THREE.SphereGeometry(1400, 20, 10), mat);
+    this.sky = new THREE.Mesh(new THREE.SphereGeometry(1400 * WORLD_SCALE, 20, 10), mat);
     this.sky.renderOrder = -10;
     this.sky.frustumCulled = false;
     view.scene.add(this.sky);

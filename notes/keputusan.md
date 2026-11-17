@@ -58,3 +58,37 @@ Format: `D-xxx` · tanggal · keputusan · alasan. Keputusan baru ditambah di ba
 - Stat masih draf dari rencana bagian 6. Hasil 8 seed setelah perubahan: 8,2–13,3 menit untuk 7 seed, 1 seed habis waktu.
 - Assassin tetap digambar penuh (tidak transparan); "siluman" hanya berarti tidak bisa diincar sampai menyerang atau terkena serangan.
 
+
+## D-027: HP kastil per level 300 -> 150 (2026-11-16)
+- Penyebab seed 7 habis waktu: sejak menit ke-6 tersisa tiga kerajaan yang berjauhan (sekitar 150–270 m). Pasukan pasif (maks 20) berangkat satu per satu begitu muncul, bertemu di tengah, dan yang sampai terlalu sedikit untuk menjebol kastil level 10 (4300 HP, menara 44 damage, HP penuh lagi tiap naik level). Tiga kerajaan saling mengincar bergantian selama 9 menit tanpa ada yang jatuh.
+- Diuji di 30 seed (20 kerajaan, tanpa gift). Sebelum: 6 ronde habis waktu, median 12,4 menit. `castleHpPerLevel` 150: 1 habis waktu, median 10,3 menit, tidak ada ronde di bawah 7 menit perang.
+- Alternatif yang diuji dan tidak dipakai: `towerDamagePerLevel` 1 (1 habis waktu, tapi 2 ronde di bawah 7 menit), `castleHpPerLevel` 200 (5 habis waktu), `towerDamagePerLevel` 2 (3 habis waktu), `passive.maxUnits` 30, `marchAtUnits` 14, `finalMultiplier` 4 (masih ada yang habis waktu di 12 seed). `hunted.weight` 0,7 jauh lebih buruk: semua mengeroyok pemimpin dan hampir semua ronde habis waktu.
+- Kastil level 10 sekarang 2950 HP (sebelumnya 4300). Stat unit baru (Gajah, Shieldbearer, Trebuchet) belum disentuh.
+
+## D-028: Animasi mati dan jasad (2026-11-16)
+- Sim tetap menghapus unit saat mati. Event `death` sekarang membawa `id` dan `heading` supaya renderer bisa meninggalkan jasad; hasil sim tidak berubah (8 seed identik sebelum dan sesudah).
+- Renderer menyimpan daftar jasad (`UnitRenderer.addCorpse`) dan menggambarnya lewat `InstancedMesh` yang sama dengan unit hidup. Jasad tinggal 4 detik: jatuh 0,6–1 dtk, diam, lalu tenggelam 0,4 m di detik terakhir. Batas 120; kalau penuh, yang tertua langsung tenggelam.
+- Gerak dibagi dua: klip `death` di `anims.ts` hanya menggerakkan anggota badan, sedangkan rebah, pecah, dan tenggelam dihitung di `render/units/death.ts`. Alasannya: rig tidak punya tulang akar yang bisa dianimasikan, dan cara ini juga berlaku untuk model prototipe.
+- Tiga gaya: `fall` (humanoid jatuh ke belakang atau samping menurut `id`; kuda, Gajah, dan Naga hanya ke samping, penunggang kuda terlempar, Naga jatuh dari udara), `shatter` (Golem, Skeleton, Ballista, Trebuchet: tiap tulang jadi satu bongkah yang terlempar lalu diam), `dissolve` (Demon berlutut lalu menyusut jadi bara, hilang setelah 1,7 dtk).
+- Belum: klip mati di Lab Animasi Kodeks, dan pemeriksaan di layar untuk Gajah dan mesin kepung.
+
+## D-029: Unit ke-20, Griffin Rider (2026-11-16)
+- Peran: unit terbang jarak dekat kelas menengah. Sebelumnya hanya Naga yang terbang, jadi Ballista (bonus +100% ke unit terbang) jarang punya sasaran.
+- Stat draf: 380 HP, 38 damage, jangkauan 2,2, kecepatan 6,6 (tercepat), `flying`, tag `big`, `hunts: ["siege", "ranged"]`. Tidak ada mekanisme sim baru; semuanya baris config. Penangkalnya Ballista (×2) dan Halberdier (+60% karena tag `big`).
+- Sumber: gift 80 koin memberi 2 Griffin Rider. Tidak masuk produksi pasif, jadi 8 seed tanpa gift tidak berubah.
+- Model `models/griffin.ts` memakai rig `dragon` supaya kepak sayapnya sama; warna kerajaan ada di bulu penutup sayap agar terbaca dari kamera atas. Tiga tingkat zirah: polos, pelindung kepala dan dada besi, lalu paruh dan cakar emas dengan panji di tombak.
+- Klip sendiri: `griffinFly`, `swoop` (serang), `griffinDeath` (jatuh, penunggang terlempar).
+- Renderer: unit terbang jarak dekat turun dari 4,5 m ke 1,3 m selama menyerang lalu naik lagi (`flyHeight` di `units.ts`), supaya cakarnya terlihat mengenai pasukan darat. Ini hanya tampilan.
+- Belum: ditonton dalam pertempuran sungguhan, dan balance dengan gift (misalnya banyak griffin memburu Trebuchet).
+
+## D-030: Peta baru, benua hutan gelap 864 x 648 m (2026-11-16)
+- Menggantikan D-025 ("peta tidak diperluas") atas permintaan user: peta lebih besar, suasana lebih gelap, terasa hutan, dan gunung dengan skala wajar yang tidak langsung menjulang.
+- Peta tidak lagi dijiplak dari gambar referensi. `tools/gen-map.mjs` membuat benua secara prosedural (seed tetap) dan menulis `game/src/sim/mapdata.ts`: grid 384 x 288 sel, 2,25 m per sel, 1,5x lebih lebar dan 2,25x lebih luas dari peta lama. Daratan 52% dari grid; dari daratan itu 56% hutan, 21% gunung, 16% padang, 4% moor, 3% pantai.
+- Lima barisan pegunungan bernama (Tembok Utara, Punggung Naga, Pegunungan Barat, Bukit Selatan, Tanduk Timur) digambar sebagai garis punggung dengan lebar berubah-ubah, sehingga tiap barisan punya celah dan ujung yang mengecil, plus beberapa massif lepas dan empat danau.
+- Relief (`map.ts`): kaki bukit selebar sekitar 60 m naik sampai 8,5 m sebelum batas batu, lalu tinggi mengikuti kedalaman di dalam barisan dan mendatar di puncak. Bagian lebar jadi puncak (tertinggi 47 m), bagian sempit tetap bukit. Lereng rata-rata 30 sampai 35 derajat. Garis salju 36 m, garis pohon 24 m.
+- Bioma `desert` dipakai ulang sebagai moor kering (semak, pohon mati, batu); palem dan kaktus tidak lagi ditanam. Nama bioma di kode tidak diubah.
+- Tampilan: palet tanah, daun, dan laut digelapkan; hutan didominasi pinus dan pohon dibuat lebih tinggi; lereng bawah gunung berwarna lantai hutan. Suasana per fase digelapkan (fajar berkabut, siang mendung, sore merah, senja ungu). Kamera overview, kabut, kubah langit, dan jarak pandang mengikuti `WORLD_SCALE`.
+- Balance tidak diubah. 30 seed dengan 20 kerajaan: 2 habis waktu, median 10,8 menit perang, 1 ronde di bawah 7 menit. 10 seed dengan 40 kerajaan: 1 habis waktu.
+- Biaya: adegan sekitar 1,5 juta segitiga (peta lama sekitar 565 ribu), sebagian besar pohon. Model pohon sudah diringankan; `?veg=0.6` menipiskan vegetasi untuk PC yang lemah. Belum diukur di PC streaming.
+- Akibat peta lebih besar: unit terlihat lebih kecil di kamera overview, dan perintah `boss` (40 dtk) bisa habis sebelum pasukan sampai ke altar, jadi penonton perlu mengetiknya lagi.
+- Belum: sungai, jalan, jembatan, landmark. `notes/peta-terrain.md` masih menjelaskan peta lama.

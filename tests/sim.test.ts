@@ -120,8 +120,11 @@ describe("war", () => {
     s.nextPhase();
     expect(s.summonDragon("a")).toBe(true);
     s.dragon!.hp = 1;
-    s.order("a", "boss");
-    run(s, 60);
+    // an order lasts 40 s and the altar can be a long march away, so the viewer repeats it
+    for (let i = 0; i < 8 && s.dragon; i++) {
+      s.order("a", "boss");
+      run(s, 30);
+    }
     expect(s.dragon).toBeNull();
     expect(s.units.some((u) => u.type === "dragon")).toBe(true);
   });

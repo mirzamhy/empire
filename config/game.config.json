@@ -11,7 +11,7 @@
     "maxActive": 40,
     "startUnits": { "spearman": 10 },
     "castleHp": 1600,
-    "castleHpPerLevel": 300,
+    "castleHpPerLevel": 150,
     "shieldSeconds": 45,
     "rejoinCooldownSeconds": 60,
     "reserveHoldSeconds": 60,
@@ -74,7 +74,8 @@
     "engineer":    { "hp": 130, "dmg": 10, "range": 1.5, "speed": 4.2, "scale": 0.42, "builds": true, "tags": ["support"] },
     "ballista":    { "hp": 260, "dmg": 45, "range": 14,  "speed": 2.6, "scale": 0.50, "ranged": true, "tags": ["siege"], "bonusVs": { "flying": 1, "dragon": 1 } },
     "elephant":    { "hp": 900, "dmg": 48, "range": 2.6, "speed": 3.4, "scale": 0.60, "arrowResist": 0.2, "tags": ["big"], "trample": 20 },
-    "trebuchet":   { "hp": 300, "dmg": 160, "range": 18, "speed": 2.2, "scale": 0.55, "ranged": true, "splash": 3, "minRange": 6, "tags": ["siege"], "bonusVs": { "castle": 3, "unit": -0.75 } }
+    "trebuchet":   { "hp": 300, "dmg": 160, "range": 18, "speed": 2.2, "scale": 0.55, "ranged": true, "splash": 3, "minRange": 6, "tags": ["siege"], "bonusVs": { "castle": 3, "unit": -0.75 } },
+    "griffin":     { "hp": 380, "dmg": 38, "range": 2.2, "speed": 6.6, "scale": 0.46, "flying": true, "tags": ["big"], "hunts": ["siege", "ranged"] }
   },
   "dragon": {
     "hpBase": 1500,

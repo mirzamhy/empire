@@ -168,3 +168,80 @@ describe("animation clips", () => {
     expect(a.stateOf(1)).toBe("walk");
   });
 });
+
+describe("death and corpses", () => {
+  it("every unit type has a way to die, and falling types have a death clip", async () => {
+    const death = await import("../game/src/render/units/death");
+    for (const t of UNIT_TYPES) {
+      const baked = rig.bakeUnit(t, 1);
+      const spec = death.deathSpec(t, baked.rig);
+      expect(spec.life, t).toBeGreaterThan(1);
+      const clip = anims.clipFor(t, baked.rig, "death");
+      if (spec.style !== "shatter") expect(clip, `${t} death clip`).toBeDefined();
+      // clips may only name bones the contract knows
+      for (const bone of Object.keys(clip?.tracks ?? {})) expect(contract.BONE_NAMES, `${t}: ${bone}`).toContain(bone);
+    }
+  });
+
+  it("a falling body ends flat, then sinks during the last second", async () => {
+    const death = await import("../game/src/render/units/death");
+    const spec = death.deathSpec("spearman", "humanoid");
+    expect(death.fallProgress(spec, 0)).toBe(0);
+    expect(death.fallProgress(spec, spec.fallSeconds / 2)).toBeLessThan(0.5);
+    expect(death.fallProgress(spec, 2)).toBeCloseTo(1, 3);
+    expect(death.sinkProgress(spec, spec.life - death.SINK_SECONDS)).toBe(0);
+    expect(death.sinkProgress(spec, spec.life)).toBe(1);
+    expect([-1, 0, 1]).toContain(death.fallSide(spec, 7));
+    // four-legged units never fall on their back
+    const horse = death.deathSpec("cavalry", "rider");
+    for (let id = 0; id < 6; id++) expect(death.fallSide(horse, id)).not.toBe(0);
+  });
+
+  it("shattered chunks fly apart, land and stay put", async () => {
+    const death = await import("../game/src/render/units/death");
+    const spec = death.deathSpec("golem", "golem");
+    expect(spec.style).toBe("shatter");
+    const m = () => ({ dx: 0, dy: 0, dz: 0, ax: 0, ay: 0, az: 0, angle: 0 });
+    const a = death.chunkMotion(spec, 5, 2, 3, 1, m());
+    const b = death.chunkMotion(spec, 5, 2, 9, 1, m());
+    expect(a).toEqual(b); // landed: nothing moves any more
+    expect(a.dy).toBeCloseTo(-1, 5); // came down by exactly its starting height
+    expect(Math.hypot(a.dx, a.dz)).toBeGreaterThan(0.3);
+    expect(Math.hypot(a.ax, a.ay, a.az)).toBeCloseTo(1, 5);
+    const other = death.chunkMotion(spec, 5, 3, 3, 1, m());
+    expect(other.dx).not.toBeCloseTo(a.dx, 3); // each chunk goes its own way
+  });
+
+  it("the renderer keeps a corpse for its lifetime and caps how many lie around", async () => {
+    const death = await import("../game/src/render/units/death");
+    const { UnitRenderer } = await import("../game/src/render/units/units");
+    const { Sim } = await import("../game/src/sim/world");
+    const { WorldMap } = await import("../game/src/sim/map");
+    const { loadConfig } = await import("../game/src/sim/config");
+    const map = new WorldMap();
+    const sim = new Sim(loadConfig(), map, 1);
+    const k = sim.join("a", "A").kingdom!;
+    const r = new UnitRenderer(map);
+    const die = (id: number, type: UnitType, at: number) => r.addCorpse(sim, { k: "death", x: k.x, z: k.z, kid: k.id, type, id, heading: 0.3 }, at);
+    for (const [i, t] of UNIT_TYPES.entries()) die(i, t, 10);
+    r.update(sim, 10.5);
+    expect(r.corpseCount).toBe(UNIT_TYPES.length);
+    // a posed corpse must not produce NaN matrices
+    let finite = true;
+    r.group.traverse((o) => {
+      const mesh = o as THREE.InstancedMesh;
+      if (!mesh.isInstancedMesh) return;
+      for (let j = 0; j < mesh.count * 16; j++) if (!Number.isFinite(mesh.instanceMatrix.array[j])) finite = false;
+    });
+    expect(finite).toBe(true);
+    r.update(sim, 12); // demons have burnt away by now
+    expect(r.corpseCount).toBe(UNIT_TYPES.length - 1);
+    r.update(sim, 14.1);
+    expect(r.corpseCount).toBe(0);
+
+    // over the cap: the oldest are pushed into their sink phase, so they are gone a second later
+    for (let i = 0; i < death.CORPSE_MAX + 30; i++) die(100 + i, "spearman", 20);
+    r.update(sim, 20 + death.SINK_SECONDS + 0.01);
+    expect(r.corpseCount).toBe(death.CORPSE_MAX);
+  });
+});

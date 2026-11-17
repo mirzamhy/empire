@@ -305,7 +305,7 @@ const SHOT_COLOR: Record<string, number> = {
   tower: 0xd9d4c7,
 };
 
-const HEAVY: Partial<Record<ShotType, number>> = { golem: 1.3, demon: 1.6, cavalry: 0.8, paladin: 0.6, dragon: 1.4, elephant: 1.5, trebuchet: 1.8, halberdier: 0.6, berserker: 0.5, ballista: 0.7 };
+const HEAVY: Partial<Record<ShotType, number>> = { golem: 1.3, demon: 1.6, cavalry: 0.8, paladin: 0.6, dragon: 1.4, elephant: 1.5, trebuchet: 1.8, halberdier: 0.6, berserker: 0.5, ballista: 0.7, griffin: 0.7 };
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
@@ -675,6 +675,10 @@ export class Fx {
     this.c.set(this.kingdomColor(kid));
     this.burst(this.debris, x, y + 0.3, z, now, big ? 10 : 4, this.c.getHex(), big ? 5 : 3.2, big ? 1.4 : 0.8, 1.2, 1, 14);
     if (type === "skeleton") this.burst(this.debris, x, y + 0.2, z, now, 4, 0xe6dfcc, 3, 0.9, 1, 1, 14);
+    // timed to the corpse (render/units/death.ts): embers as the demon burns away, dust when a
+    // dragon hits the ground
+    if (type === "demon") this.burst(this.glow, x, y + 0.5, z, now + 0.8, 16, 0xff6a2a, 2.4, 0.3, 0.9, 1.2, -1.5);
+    if (type === "dragon") this.burst(this.dust, x, y - 0.3, z, now + 0.7, 10, 0xd8cfc0, 4, 1.0, 0.9, 0.3, -0.4);
     if (big) {
       this.ring(x, z, now, 4 + heavy * 2, 0xffd9a0, 0.55);
       this.onShake(0.3, x, z);

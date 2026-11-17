@@ -7,12 +7,21 @@ import type { Rng } from "./rng";
 export type Biome = "water" | "beach" | "plains" | "desert" | "forest" | "mountain";
 const CODE: Record<string, Biome> = { "~": "water", b: "beach", s: "plains", d: "desert", f: "forest", m: "mountain" };
 
+/** foothill ramp around a range: width in cells and the height it reaches at the rock line */
+const FOOTHILL_CELLS = 26;
+const FOOTHILL_HEIGHT = 8.5;
+/** depth inside a range (cells) at which it reaches full height, and that height above the foothills */
+const PEAK_CELLS = 20;
+const PEAK_HEIGHT = 27;
+
 /** metres per grid cell */
 export const CELL = 2.25;
 export const GRID_W = MAP_W;
 export const GRID_H = MAP_H;
 export const WORLD_W = GRID_W * CELL;
 export const WORLD_H = GRID_H * CELL;
+/** size of this world relative to the first EMPIRE map (576 m wide); cameras and fog scale with it */
+export const WORLD_SCALE = WORLD_W / 576;
 
 export class WorldMap {
   readonly biome: Biome[] = [];
@@ -55,16 +64,22 @@ export class WorldMap {
       const inland = smoothstep(2, 10, distWater[i]);
       let hgt = Math.min(distWater[i], 8) * 0.14 + ripple;
       hgt += (vnoise(x / 22, y / 22) * 2.6 + vnoise(x / 8 + 40, y / 8) * 0.8) * inland;
-      if (b === "desert") hgt += ridge(x / 9 + y / 30, y / 14) * 1.1 * inland; // dunes
+      if (b === "desert") hgt += ridge(x / 9 + y / 30, y / 14) * 0.7 * inland; // moor hummocks
       if (b === "forest") hgt += 0.15;
-      // foothills: the land swells as it nears a mountain
-      if (b !== "mountain") hgt += (1 - smoothstep(0, 7, distMtn[i])) ** 2 * 3.2;
+      // foothills: a long ramp of rolling hills leads up to every range (about 60 m wide, 9 m high)
+      // so a mountain never rises straight out of flat ground
+      const foot = b === "mountain" ? 1 : (1 - smoothstep(0, FOOTHILL_CELLS, distMtn[i])) ** 1.5;
+      // (flattened toward lakes and the coast so the shore is a bank, not a pit wall)
+      hgt += foot * (FOOTHILL_HEIGHT + (vnoise(x / 6 + 9, y / 6 + 3) - 0.5) * 3.2) * (0.2 + 0.8 * inland);
       if (b === "mountain") {
-        // mountains: a tall core that grows with the depth inside the range, cut by sharp ridges
-        const core = smoothstep(0, 13, distRock[i]);
-        hgt += 3.2 + 24 * core ** 1.1;
-        hgt += ridge(x / 13, y / 13) * 9 * (0.25 + core) + ridge(x / 5 + 17, y / 5) * 2.2 * (0.3 + core);
-        hgt += vnoise(x / 2.5, y / 2.5) * 1.2;
+        // the range itself: height follows the depth inside it, easing in from the foothills and
+        // levelling off at the crest, so wide parts become peaks and narrow parts stay hills.
+        // Peak height is about half the half-width of the range: slopes average 30 to 35 degrees.
+        const core = smoothstep(0, PEAK_CELLS, distRock[i]);
+        hgt += PEAK_HEIGHT * core ** 1.2;
+        // crest lines and spurs only where the range is already high
+        hgt += ridge(x / 15, y / 15) * 7 * core + ridge(x / 6 + 17, y / 6) * 2.4 * core;
+        hgt += vnoise(x / 2.5, y / 2.5) * 0.9 * smoothstep(0, 5, distRock[i]);
       }
       this.height[i] = hgt;
     }
@@ -98,7 +113,8 @@ export class WorldMap {
       const b = this.biome[i];
       if (this.component[i] !== best) continue;
       if (b === "water" || b === "mountain" || b === "beach") continue;
-      if (distMtn[i] < 2 || distWater[i] < 3) continue;
+      // castles stand on the lowlands, not on the foothill slopes
+      if (distMtn[i] < 8 || distWater[i] < 3) continue;
       this.buildable[i] = 1;
     }
 

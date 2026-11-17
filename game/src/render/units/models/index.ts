@@ -19,6 +19,7 @@ import { build as dragon } from "./dragon";
 import { build as elephant } from "./elephant";
 import { build as engineer } from "./engineer";
 import { build as golem } from "./golem";
+import { build as griffin } from "./griffin";
 import { build as halberdier } from "./halberdier";
 import { build as necromancer } from "./necromancer";
 import { build as paladin } from "./paladin";
@@ -30,5 +31,5 @@ import { build as trebuchet } from "./trebuchet";
 import { build as wizard } from "./wizard";
 
 export const MODELS: Partial<Record<UnitType, ModelBuilder>> = {
-  archer, assassin, ballista, berserker, cavalry, demon, dragon, elephant, engineer, golem, halberdier, necromancer, paladin, shieldbearer, skeleton, spearman, swordsman, trebuchet, wizard,
+  archer, assassin, ballista, berserker, cavalry, demon, dragon, elephant, engineer, golem, griffin, halberdier, necromancer, paladin, shieldbearer, skeleton, spearman, swordsman, trebuchet, wizard,
 };

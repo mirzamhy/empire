@@ -13,10 +13,12 @@ Diperbarui: 2026-11-16. Daftar ini dibuat setelah rencana visual (`docs/rencana-
 | Lab Animasi di Kodeks | Selesai |
 | Klip serangan per unit, semburan Naga dari mulut | Selesai |
 | Terrain: warna, air, 15 jenis tanaman + angin | Selesai |
-| Relief peta (gunung ±44 m), suasana cahaya per fase | Selesai |
+| Peta baru 864 x 648 m: benua hutan gelap, 5 barisan gunung dengan kaki bukit, suasana lebih gelap | Selesai (D-030), performa belum diukur |
 | 8 unit baru (mekanisme, model, gift) | Selesai, stat masih draf |
+| Griffin Rider (unit ke-20, gift 80 koin) | Selesai (D-029), stat draf, belum ditonton bertempur |
 | Sungai, jalan, jembatan, landmark | Belum |
-| Animasi mati, jasad, klip kena pukul dan muncul | Belum |
+| Animasi mati dan jasad | Selesai (D-028), belum ditonton satu ronde penuh |
+| Klip kena pukul dan muncul | Belum |
 | Bloom, tone mapping, vignette | Belum (tunggu pengukuran) |
 
 ## 1. Lakukan dulu (tanpa kode baru)
@@ -34,7 +36,7 @@ Diperbarui: 2026-11-16. Daftar ini dibuat setelah rencana visual (`docs/rencana-
 
 ## 2. Balance (setelah ditonton)
 
-- Satu dari 8 seed (seed 7) habis waktu 16 menit dengan 3 kerajaan tersisa. Jalankan `npx tsx scripts/sim-seeds.ts` dan cari penyebabnya sebelum menyetel stat.
+- Selesai (D-027): seed 7 habis waktu karena tiga kerajaan terakhir berjauhan dan pasukan pasif datang satu per satu ke kastil level 10. `castleHpPerLevel` diturunkan 300 -> 150; 8 seed sekarang selesai dalam 7,2–14,5 menit perang, dan di 30 seed tinggal 1 yang habis waktu (sebelumnya 6). Belum ditonton di layar.
 - Stat unit baru masih draf dari rencana bagian 6. Yang paling perlu dicurigai: Gajah (900 HP) dan Shieldbearer (taunt memperlambat ronde), Trebuchet (160 damage ke kastil).
 - Engineer sengaja tidak ada di produksi pasif karena bikin ronde molor. Boleh dicoba lagi di level 10 saja.
 - Sasaran: ronde 7–15 menit di 8 seed, tanpa satu kerajaan terlalu dominan.
@@ -42,7 +44,7 @@ Diperbarui: 2026-11-16. Daftar ini dibuat setelah rencana visual (`docs/rencana-
 
 ## 3. Pekerjaan berikutnya (urut saran)
 
-1. **Animasi mati dan jasad** (rencana 4.6): klip `death`, jasad tinggal 4 detik lalu hilang, Golem pecah, Skeleton berantakan. Ini yang membuat pertempuran terasa paling hidup setelah serangan.
+1. ~~Animasi mati dan jasad~~ selesai (D-028). Sisa: tombol "Mati" di Lab Animasi Kodeks, dan cek Gajah serta mesin kepung di layar.
 2. **Klip kena pukul, muncul (`spawn`), dan lari** untuk semua humanoid. Plus `brace` (Halberdier dan Shieldbearer), `sneak` (Assassin).
 3. **Efek unit baru:** asap Assassin saat muncul, uap merah Berserker saat HP < 50%, lingkaran merah sasaran Trebuchet sebelum batu mendarat, debu langkah Gajah, panah memantul dari Shieldbearer.
 4. **`windup` di sim** (butuh keputusanmu, lihat pertanyaan 12.2 di rencana): damage jatuh setelah ancang-ancang selesai. Tanpa ini gerakan mulai dari posisi ancang-ancang dan damage terasa sedikit mendahului gerakan.

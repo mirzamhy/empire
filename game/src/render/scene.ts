@@ -1,5 +1,6 @@
 // Renderer, camera and lights. Portrait 1080x1920 is the target, any size works.
 import * as THREE from "three";
+import { WORLD_SCALE } from "../sim/map";
 
 export interface SceneHandles {
   renderer: THREE.WebGLRenderer;
@@ -20,10 +21,11 @@ export function createScene(container: HTMLElement): SceneHandles {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x163d4d);
-  scene.fog = new THREE.Fog(0x163d4d, 420, 950);
+  // haze starts just in front of the overview shot and thickens toward the far coast
+  scene.fog = new THREE.Fog(0x163d4d, 400 * WORLD_SCALE, 900 * WORLD_SCALE);
 
-  const camera = new THREE.PerspectiveCamera(55, 9 / 16, 0.5, 1600);
-  camera.position.set(0, 400, 290);
+  const camera = new THREE.PerspectiveCamera(55, 9 / 16, 0.5, 1600 * WORLD_SCALE);
+  camera.position.set(0, 400 * WORLD_SCALE, 290 * WORLD_SCALE);
   camera.lookAt(0, 0, 0);
 
   const hemi = new THREE.HemisphereLight(0xfff4dc, 0x3a4a3f, 0.95);

@@ -73,20 +73,27 @@ function distanceField(source: (i: number) => boolean): Float32Array {
 
 /** Two tones per biome; a 40 m noise picks between them (young and old grass, pale and deep sand). */
 const GROUND: Record<Biome, [number, number]> = {
-  water: [0x4f8a86, 0x2c5a66],
-  beach: [0xe0cfa0, 0xd0bd88],
-  plains: [0x9fb565, 0xb7ae74],
-  desert: [0xdba556, 0xc98a3c],
-  forest: [0x55833a, 0x3e6b2f],
-  mountain: [0x8d7e6c, 0x74675a],
+  water: [0x35676a, 0x1c3f4d],
+  beach: [0xb3a587, 0x9c8f73], // grey shingle
+  plains: [0x5f7f3e, 0x717c46], // forest meadows
+  desert: [0x87764a, 0x74603a], // dry moor (the "desert" biome of this map)
+  forest: [0x34602c, 0x254a26],
+  mountain: [0x6c655b, 0x585149],
 };
-const ROCK = new THREE.Color(0x80776b);
-const ROCK_DARK = new THREE.Color(0x5a524b);
+const ROCK = new THREE.Color(0x716a61);
+const ROCK_DARK = new THREE.Color(0x4c4640);
 const SNOW = new THREE.Color(0xeef2f5);
-const WET_SAND = new THREE.Color(0xb39f76);
-const SNOW_LINE = 25;
+const WET_SAND = new THREE.Color(0x857a62);
+/** peaks reach 40 to 50 m, so only the crests carry snow */
+const SNOW_LINE = 36;
+/** trees thin out above this height and stop a little below the snow */
+const TREE_LINE = 24;
 
-export function buildTerrain(map: WorldMap): TerrainHandles {
+/**
+ * `plantDensity` thins or thickens all vegetation (1 = designed density). The forest is most of
+ * the scene's triangles, so a weak streaming PC can run with `?veg=0.6`.
+ */
+export function buildTerrain(map: WorldMap, plantDensity = 1): TerrainHandles {
   const group = new THREE.Group();
   const rng = new Rng(42);
   const time = { value: 0 };
@@ -133,6 +140,7 @@ export function buildTerrain(map: WorldMap): TerrainHandles {
   const uv: number[] = [];
   const c = new THREE.Color();
   const c2 = new THREE.Color();
+  const c3 = new THREE.Color();
   const ox = -WORLD_W / 2;
   const oz = -WORLD_H / 2;
   const corner = (x: number, y: number) => [ox + x * CELL, hc[y * cw + x], oz + y * CELL];
@@ -157,6 +165,12 @@ export function buildTerrain(map: WorldMap): TerrainHandles {
     const macro = vnoise(wx / 40, wz / 40) * 0.65 + vnoise(wx / 9 + 40, wz / 9) * 0.35;
     const [ta, tb] = GROUND[b];
     c.setHex(ta).lerp(c2.setHex(tb), smooth(0.3, 0.7, macro));
+    if (b === "mountain") {
+      // lower slopes keep the forest floor; bare rock colours start near the tree line
+      const [fa, fb] = GROUND.forest;
+      c3.setHex(fa).lerp(c2.setHex(fb), smooth(0.3, 0.7, macro));
+      c.lerp(c3, 1 - smooth(TREE_LINE - 10, TREE_LINE + 3, h + (vnoise(wx * 0.15, wz * 0.15) - 0.5) * 6));
+    }
     if (own === "water") {
       // sea floor: lighter in the shallows
       c.setHex(ta).lerp(c2.setHex(tb), smooth(0, 5, distLand[i]));
@@ -243,11 +257,11 @@ diffuseColor.rgb *= 1.0 - cloud * uCloud;`,
 
   const water = buildWater(distLand, time);
   group.add(water);
-  const deep = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_W * 6, WORLD_H * 6).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x163d4d }));
+  const deep = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_W * 6, WORLD_H * 6).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x0e2a37 }));
   deep.position.y = -7;
   group.add(deep);
 
-  const veg = buildVegetation(map, distWater, time);
+  const veg = buildVegetation(map, time, plantDensity);
   group.add(...veg.meshes);
 
   const { altar, crystal } = buildAltar();
@@ -299,9 +313,9 @@ function buildWater(distLand: Float32Array, time: { value: number }) {
     shader.uniforms.uTime = time;
     shader.uniforms.uDist = { value: distTex };
     shader.uniforms.uSize = { value: new THREE.Vector2(WORLD_W, WORLD_H) };
-    shader.uniforms.uShallow = { value: new THREE.Color(0x63c7cb) };
-    shader.uniforms.uMid = { value: new THREE.Color(0x2f7f93) };
-    shader.uniforms.uDeep = { value: new THREE.Color(0x1a4a5e) };
+    shader.uniforms.uShallow = { value: new THREE.Color(0x4a9fa3) };
+    shader.uniforms.uMid = { value: new THREE.Color(0x1f5b6e) };
+    shader.uniforms.uDeep = { value: new THREE.Color(0x103444) };
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nuniform float uTime;\nvarying vec2 vWorldXZ;")
       .replace(
@@ -356,16 +370,16 @@ type PlantKind =
 
 /** Leaf colours per kind (the instance colour varies around one of these). */
 const LEAF: Partial<Record<PlantKind, number[]>> = {
-  oakRound: [0x3f8a2a, 0x4c9a30, 0x357a2a],
-  oakTall: [0x2f7a34, 0x3d8a3a],
-  oakWide: [0x5a9a2e, 0x6aa838, 0x8aa83a],
-  pine: [0x1f6b3a, 0x245f3a],
-  pineTall: [0x1a5a38, 0x1f6b4a],
-  pineSnow: [0x2a6a4a],
-  birch: [0x9ab83a, 0xb8c040, 0xd0b03a],
-  bush: [0x4a8a30, 0x5a7a2a, 0x3a7a3a],
+  oakRound: [0x2f6a24, 0x3a7628, 0x2a5e24],
+  oakTall: [0x265e2a, 0x30692e],
+  oakWide: [0x44762a, 0x527f30, 0x6a8034],
+  pine: [0x17502e, 0x1b4a30, 0x143f2a],
+  pineTall: [0x13442c, 0x184f36, 0x103a28],
+  pineSnow: [0x21553c],
+  birch: [0x7f9a34, 0x969f3a, 0xa88f36],
+  bush: [0x3a6c2a, 0x466226, 0x2e5e2e],
   palm: [0x4d8c1f, 0x5a9a2a],
-  grass: [0x8fb04a, 0xa8b85a, 0x7aa040],
+  grass: [0x6f8c40, 0x82904a, 0x5f7f38],
   flower: [0xf5d040, 0xc070e0, 0xf5f0e0, 0xf08a5a],
 };
 
@@ -375,28 +389,29 @@ function plantGeometry(kind: PlantKind): THREE.BufferGeometry {
   const L = leaf();
   switch (kind) {
     case "oakRound":
-      mesh(g, new THREE.CylinderGeometry(0.2, 0.34, 1.5, 5), bark, 0, 0.75, 0);
+      mesh(g, new THREE.CylinderGeometry(0.2, 0.34, 1.5, 4, 1, true), bark, 0, 0.75, 0);
       mesh(g, new THREE.IcosahedronGeometry(1.2, 0), L, 0, 2.1, 0);
       mesh(g, new THREE.IcosahedronGeometry(0.75, 0), L, 0.7, 2.6, 0.3);
       break;
     case "oakTall":
-      mesh(g, new THREE.CylinderGeometry(0.2, 0.36, 2.2, 5), bark, 0, 1.1, 0);
+      mesh(g, new THREE.CylinderGeometry(0.2, 0.36, 2.2, 4, 1, true), bark, 0, 1.1, 0);
       mesh(g, new THREE.IcosahedronGeometry(1.1, 0), L, 0, 2.6, 0, 0, 0, [1, 1.15, 1]);
       mesh(g, new THREE.IcosahedronGeometry(0.8, 0), L, 0.1, 3.7, -0.1);
       break;
     case "oakWide":
-      mesh(g, new THREE.CylinderGeometry(0.24, 0.4, 1.3, 5), bark, 0, 0.65, 0);
-      mesh(g, new THREE.CylinderGeometry(0.1, 0.16, 0.9, 4), bark, 0.45, 1.5, 0, 0, -0.7);
-      mesh(g, new THREE.DodecahedronGeometry(1.3, 0), L, 0, 2.0, 0, 0, 0, [1.35, 0.7, 1.25]);
-      mesh(g, new THREE.DodecahedronGeometry(0.8, 0), L, -0.9, 1.75, 0.5, 0, 0, [1.2, 0.7, 1.1]);
+      mesh(g, new THREE.CylinderGeometry(0.24, 0.4, 1.3, 4, 1, true), bark, 0, 0.65, 0);
+      mesh(g, new THREE.CylinderGeometry(0.1, 0.16, 0.9, 3, 1, true), bark, 0.45, 1.5, 0, 0, -0.7);
+      mesh(g, new THREE.IcosahedronGeometry(1.3, 0), L, 0, 2.0, 0, 0, 0, [1.35, 0.7, 1.25]);
+      mesh(g, new THREE.IcosahedronGeometry(0.8, 0), L, -0.9, 1.75, 0.5, 0, 0, [1.2, 0.7, 1.1]);
       break;
     case "pine":
-      mesh(g, new THREE.CylinderGeometry(0.18, 0.28, 1.3, 5), lam(0x5c3a21), 0, 0.65, 0);
-      for (let i = 0; i < 3; i++) mesh(g, new THREE.ConeGeometry(1.15 - i * 0.25, 1.5 - i * 0.2, 6), L, 0, 1.5 + i * 0.85, 0);
+      // open cones and trunk: nobody sees a pine from below, and forests are made of thousands
+      mesh(g, new THREE.CylinderGeometry(0.18, 0.28, 1.3, 4, 1, true), lam(0x4a2f1c), 0, 0.65, 0);
+      for (let i = 0; i < 3; i++) mesh(g, new THREE.ConeGeometry(1.15 - i * 0.25, 1.5 - i * 0.2, 6, 1, true), L, 0, 1.5 + i * 0.85, 0);
       break;
     case "pineTall":
-      mesh(g, new THREE.CylinderGeometry(0.16, 0.3, 2.0, 5), lam(0x5c3a21), 0, 1.0, 0);
-      for (let i = 0; i < 4; i++) mesh(g, new THREE.ConeGeometry(1.0 - i * 0.2, 1.5 - i * 0.15, 6), L, 0, 2.0 + i * 0.9, 0);
+      mesh(g, new THREE.CylinderGeometry(0.16, 0.3, 2.0, 4, 1, true), lam(0x4a2f1c), 0, 1.0, 0);
+      for (let i = 0; i < 4; i++) mesh(g, new THREE.ConeGeometry(1.0 - i * 0.2, 1.5 - i * 0.15, 6, 1, true), L, 0, 2.0 + i * 0.9, 0);
       break;
     case "pineSnow":
       mesh(g, new THREE.CylinderGeometry(0.18, 0.28, 1.3, 5), lam(0x5c3a21), 0, 0.65, 0);
@@ -406,9 +421,8 @@ function plantGeometry(kind: PlantKind): THREE.BufferGeometry {
       }
       break;
     case "birch":
-      mesh(g, new THREE.CylinderGeometry(0.11, 0.17, 2.6, 5), lam(0xe8e4d8), 0, 1.3, 0);
-      mesh(g, new THREE.BoxGeometry(0.2, 0.08, 0.2), lam(0x3a3632), 0, 0.9, 0);
-      mesh(g, new THREE.BoxGeometry(0.19, 0.07, 0.19), lam(0x3a3632), 0, 1.7, 0);
+      mesh(g, new THREE.CylinderGeometry(0.11, 0.17, 2.6, 4, 1, true), lam(0xd6d2c6), 0, 1.3, 0);
+      mesh(g, new THREE.BoxGeometry(0.21, 0.08, 0.21), lam(0x3a3632), 0, 1.2, 0);
       mesh(g, new THREE.IcosahedronGeometry(0.8, 0), L, 0, 3.0, 0, 0, 0, [1, 1.25, 1]);
       mesh(g, new THREE.IcosahedronGeometry(0.55, 0), L, 0.4, 2.4, 0.2);
       break;
@@ -440,19 +454,19 @@ function plantGeometry(kind: PlantKind): THREE.BufferGeometry {
       }
       break;
     case "rock":
-      mesh(g, new THREE.DodecahedronGeometry(0.8, 0), lam(0x77706a), 0, 0.3, 0, 0, 0, [1.2, 0.7, 1]);
+      mesh(g, new THREE.IcosahedronGeometry(0.8, 0), lam(0x6a645e), 0, 0.3, 0, 0, 0, [1.2, 0.7, 1]);
       break;
     case "boulder":
-      mesh(g, new THREE.DodecahedronGeometry(1.3, 0), lam(0x6c655f), 0, 0.6, 0, 0.3, 0.2, [1.1, 0.9, 1]);
-      mesh(g, new THREE.DodecahedronGeometry(0.7, 0), lam(0x827a72), 1.1, 0.25, 0.4, 0, 0, [1, 0.7, 1.1]);
+      mesh(g, new THREE.IcosahedronGeometry(1.3, 0), lam(0x5f5953), 0, 0.6, 0, 0.3, 0.2, [1.1, 0.9, 1]);
+      mesh(g, new THREE.IcosahedronGeometry(0.7, 0), lam(0x746d66), 1.1, 0.25, 0.4, 0, 0, [1, 0.7, 1.1]);
       break;
     case "grass":
       for (let i = 0; i < 4; i++) mesh(g, new THREE.ConeGeometry(0.07, 0.55 - (i % 2) * 0.15, 3), L, Math.cos(i * 1.7) * 0.14, 0.25, Math.sin(i * 1.7) * 0.14, Math.sin(i * 1.7) * 0.25, -Math.cos(i * 1.7) * 0.25);
       break;
     case "flower":
-      mesh(g, new THREE.CylinderGeometry(0.02, 0.02, 0.4, 3), lam(0x5a8a3a), 0, 0.2, 0);
+      mesh(g, new THREE.CylinderGeometry(0.02, 0.02, 0.4, 3, 1, true), lam(0x4a7632), 0, 0.2, 0);
       mesh(g, new THREE.OctahedronGeometry(0.13, 0), L, 0, 0.45, 0);
-      mesh(g, new THREE.CylinderGeometry(0.02, 0.02, 0.3, 3), lam(0x5a8a3a), 0.22, 0.15, 0.1);
+      mesh(g, new THREE.CylinderGeometry(0.02, 0.02, 0.3, 3, 1, true), lam(0x4a7632), 0.22, 0.15, 0.1);
       mesh(g, new THREE.OctahedronGeometry(0.1, 0), L, 0.22, 0.35, 0.1);
       break;
   }
@@ -484,13 +498,13 @@ function windMaterial(time: { value: number }) {
  * Place plants by biome with a density noise, so forests have thick groves and small clearings
  * and the plains stay open enough to read the armies.
  */
-function buildVegetation(map: WorldMap, distWater: Float32Array, time: { value: number }) {
+function buildVegetation(map: WorldMap, time: { value: number }, plantDensity: number) {
   const rng = new Rng(4242);
   const kinds: PlantKind[] = ["oakRound", "oakTall", "oakWide", "pine", "pineTall", "pineSnow", "birch", "bush", "dead", "cactus", "palm", "rock", "boulder", "grass", "flower"];
   const spots = new Map<PlantKind, { m: THREE.Matrix4; c: THREE.Color }[]>(kinds.map((k) => [k, []]));
   const q = new THREE.Quaternion();
   const up = new THREE.Vector3(0, 1, 0);
-  const dens = (CELL / 1.5) ** 2; // plants per square metre stay constant when the cell size changes
+  const dens = (CELL / 1.5) ** 2 * plantDensity; // plants per square metre stay constant when the cell size changes
   const pick = <T,>(list: T[]) => list[Math.floor(rng.next() * list.length) % list.length];
 
   for (let i = 0; i < GRID_W * GRID_H; i++) {
@@ -507,8 +521,9 @@ function buildVegetation(map: WorldMap, distWater: Float32Array, time: { value: 
     if (b === "forest") {
       if (r < 0.06 + 0.38 * grove) {
         const t = rng.next();
-        if (mix < 0.38) kind = t < 0.55 ? "pine" : t < 0.85 ? "pineTall" : "bush";
-        else if (mix < 0.7) kind = t < 0.4 ? "oakRound" : t < 0.65 ? "oakTall" : t < 0.8 ? "birch" : t < 0.92 ? "bush" : "pine";
+        // conifers dominate: dark pine woods with broadleaf pockets
+        if (mix < 0.56) kind = t < 0.5 ? "pine" : t < 0.92 ? "pineTall" : "bush";
+        else if (mix < 0.78) kind = t < 0.4 ? "oakRound" : t < 0.65 ? "oakTall" : t < 0.8 ? "birch" : t < 0.92 ? "bush" : "pine";
         else kind = t < 0.35 ? "oakWide" : t < 0.6 ? "oakRound" : t < 0.85 ? "birch" : "bush";
       } else if (r < 0.1 + 0.4 * grove) kind = rng.next() < 0.6 ? "grass" : "flower";
     } else if (b === "plains") {
@@ -517,24 +532,28 @@ function buildVegetation(map: WorldMap, distWater: Float32Array, time: { value: 
       else if (r < 0.04) kind = rng.next() < 0.7 ? "bush" : "rock";
       else if (r < 0.04 + 0.16 * meadow) kind = rng.next() < 0.65 ? "grass" : "flower";
     } else if (b === "desert") {
-      if (distWater[i] < 4 && r < 0.07) kind = "palm";
-      else if (r < 0.03) kind = "cactus";
-      else if (r < 0.045) kind = rng.next() < 0.5 ? "dead" : "rock";
-      else if (r < 0.055) kind = "boulder";
+      // moor: heather-like bushes, dead trees and stones, with tufts of dry grass
+      if (r < 0.035) kind = "bush";
+      else if (r < 0.055) kind = rng.next() < 0.55 ? "dead" : "rock";
+      else if (r < 0.065) kind = "boulder";
+      else if (r < 0.2) kind = "grass";
     } else if (b === "mountain") {
-      if (h > SNOW_LINE + 4) kind = r < 0.05 ? "boulder" : null; // bare peaks
-      else if (h > SNOW_LINE - 6) kind = r < 0.06 ? "pineSnow" : r < 0.11 ? "boulder" : null;
-      else if (r < 0.07) kind = rng.next() < 0.6 ? "pine" : "pineTall";
-      else if (r < 0.13) kind = rng.next() < 0.6 ? "rock" : "boulder";
-      else if (r < 0.14) kind = "dead";
+      if (h > SNOW_LINE) kind = r < 0.012 ? "rock" : null; // bare peaks
+      else if (h > TREE_LINE + 6) kind = r < 0.04 ? "pineSnow" : r < 0.07 ? "boulder" : null;
+      else if (h > TREE_LINE) kind = r < 0.1 ? (rng.next() < 0.5 ? "pine" : "pineSnow") : r < 0.14 ? "rock" : null;
+      // below the tree line the slopes are wooded like the foothills
+      else if (r < 0.1 + 0.32 * grove) kind = rng.next() < 0.5 ? "pine" : "pineTall";
+      else if (r < 0.13 + 0.32 * grove) kind = rng.next() < 0.6 ? "rock" : "boulder";
     } else if (b === "beach") {
-      if (r < 0.03) kind = "palm";
-      else if (r < 0.05) kind = "rock";
+      if (r < 0.03) kind = "rock";
+      else if (r < 0.04) kind = "dead"; // driftwood
     }
     if (!kind) continue;
     if (Math.hypot(x - map.altar.x, z - map.altar.z) < 12) continue;
     const small = kind === "grass" || kind === "flower";
-    const s = small ? 0.8 + rng.next() * 0.7 : 0.65 + rng.next() * 0.45;
+    const tree = kind === "pine" || kind === "pineTall" || kind === "oakRound" || kind === "oakTall" || kind === "oakWide";
+    // forest trees are tall enough to close the canopy; castles (about 10 m) still stand above them
+    const s = small ? 0.8 + rng.next() * 0.7 : tree ? 0.85 + rng.next() * 0.6 : 0.65 + rng.next() * 0.45;
     q.setFromAxisAngle(up, rng.next() * Math.PI * 2);
     const m = new THREE.Matrix4().compose(new THREE.Vector3(x, map.heightAt(x, z) - 0.05, z), q, new THREE.Vector3(s, s * (0.9 + rng.next() * 0.25), s));
     const tones = LEAF[kind];

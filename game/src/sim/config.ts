@@ -2,7 +2,7 @@
 import raw from "../../../config/game.config.json";
 
 export const UNIT_TYPES = ["spearman", "swordsman", "archer", "wizard", "paladin", "necromancer", "cavalry", "golem", "dragon", "demon", "skeleton",
-  "halberdier", "shieldbearer", "berserker", "assassin", "engineer", "ballista", "elephant", "trebuchet",
+  "halberdier", "shieldbearer", "berserker", "assassin", "engineer", "ballista", "elephant", "trebuchet", "griffin",
 ] as const;
 export type UnitType = (typeof UNIT_TYPES)[number];
 export type UnitBundle = Partial<Record<UnitType, number>>;
@@ -77,6 +77,7 @@ export const UNIT_LABEL: Record<UnitType, string> = {
   ballista: "Ballista",
   elephant: "Gajah Perang",
   trebuchet: "Trebuchet",
+  griffin: "Griffin Rider",
 };
 
 export const UNIT_ICON: Record<UnitType, string> = {
@@ -99,6 +100,7 @@ export const UNIT_ICON: Record<UnitType, string> = {
   ballista: "🎯",
   elephant: "🐘",
   trebuchet: "🪨",
+  griffin: "🦅",
 };
 
 /** 24 banner colours, spread around the hue wheel so neighbours differ. */

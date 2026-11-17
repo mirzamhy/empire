@@ -107,6 +107,7 @@ const DESC: Record<string, string> = {
   engineer: "Tukang bangun kerajaan. Mengubah desa jadi pos berjaga dengan menara panah.",
   ballista: "Busur raksasa beroda dengan dua awak. Jangkauannya jauh dan mematikan bagi Naga.",
   elephant: "Gajah perang dengan menara penombak di punggungnya. Menerjang barisan dan menginjak apa pun yang kecil.",
+  griffin: "Penombak di punggung griffin. Terbang melewati barisan depan lalu menukik ke pemanah dan mesin kepung.",
   trebuchet: "Pelontar batu raksasa. Menghancurkan kastil dari jauh, tapi tak berdaya bila musuh sudah dekat.",
 };
 

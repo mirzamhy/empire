@@ -228,7 +228,7 @@ export class Hud {
     cv.width = w;
     cv.height = h;
     const c = cv.getContext("2d")!;
-    const colors: Record<string, string> = { water: "#1f4e5c", beach: "#cdb98a", plains: "#a9a06c", desert: "#c98b42", forest: "#4f7a34", mountain: "#6e6152" };
+    const colors: Record<string, string> = { water: "#143845", beach: "#a89a7c", plains: "#768c4a", desert: "#86744a", forest: "#2f5a2a", mountain: "#7a7268" };
     const step = 2;
     for (let y = 0; y < h; y += step)
       for (let x = 0; x < w; x += step) {

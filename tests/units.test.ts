@@ -168,3 +168,31 @@ describe("engineer", () => {
     expect(v.build).toBe(0);
   });
 });
+
+describe("griffin rider", () => {
+  it("flies, counts as big, and is weak to ballistas and halberds", () => {
+    const { priv, s } = duel();
+    expect(s.cfg.unitTypes.griffin.flying).toBe(true);
+    expect(priv.hasTag("griffin", "flying")).toBe(true);
+    expect(priv.bonusVs("ballista", "griffin")).toBeCloseTo(2);
+    expect(priv.bonusVs("halberdier", "griffin")).toBeCloseTo(1.6);
+  });
+
+  it("dives on archers and siege engines before closer melee units", () => {
+    const { s, put, mx, mz } = duel();
+    const g = put("a", "griffin", mx, mz);
+    put("b", "spearman", mx + 3, mz);
+    const archer = put("b", "archer", mx + 9, mz);
+    run(s, 0.2);
+    expect(g.tId).toBe(archer.id);
+    archer.alive = false;
+    const treb = put("b", "trebuchet", mx - 10, mz);
+    run(s, 0.6);
+    expect(g.tId).toBe(treb.id);
+  });
+
+  it("an 80-coin gift brings two griffins", async () => {
+    const { loadEventsConfig, troopsForValue } = await import("../game/src/live/router");
+    expect(troopsForValue(80, loadEventsConfig()).units).toEqual({ griffin: 2 });
+  });
+});

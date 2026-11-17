@@ -2,11 +2,12 @@
 // poses every unit and bone matrices are chained parent -> child on the CPU (plan 4.2, stage A).
 import * as THREE from "three";
 import { UNIT_TYPES, type UnitType } from "../../sim/config";
-import type { Sim, Unit } from "../../sim/world";
+import type { Sim, SimEvent, Unit } from "../../sim/world";
 import type { WorldMap } from "../../sim/map";
 import { instancedMaterial } from "../bake";
 import type { SocketName } from "./contract";
 import { Animator, POSE_STRIDE } from "./animator";
+import { CORPSE_MAX, SINK_DEPTH, SINK_SECONDS, chunkMotion, deathSpec, dissolveScale, fallProgress, fallSide, sinkProgress, type ChunkMotion, type DeathSpec } from "./death";
 import { bakeUnit, type BakedRig } from "./rig";
 
 const CAPACITY = 420;
@@ -26,6 +27,32 @@ export const tierOfLevel = (level: number): 1 | 2 | 3 => (level >= 8 ? 3 : level
 type Tier = 1 | 2 | 3;
 const TIERS: Tier[] = [1, 2, 3];
 const FLASH = new THREE.Color(0xffffff);
+/** corpses fade towards this as they lie on the field */
+const DEAD = new THREE.Color(0x4a4640);
+const EMBER = new THREE.Color(0xff6a2a);
+/** height flying units hover at (also where their corpse starts falling from) */
+const FLY_HEIGHT = 4.5;
+/** flying melee units come down to this height while they fight, so claws reach the ground troops */
+const DIVE_HEIGHT = 1.3;
+/** seconds after its last blow before a diver climbs again (longer than the attack cooldown) */
+const DIVE_HOLD = 1.3;
+
+/** A dead unit the sim has already dropped; drawn for a few seconds with the death motion. */
+interface Corpse {
+  id: number;
+  type: UnitType;
+  tier: Tier;
+  color: string;
+  x: number;
+  z: number;
+  ground: number;
+  heading: number;
+  scale: number;
+  /** height above the ground at the moment of death (flying units) */
+  height: number;
+  diedAt: number;
+  spec: DeathSpec;
+}
 
 export class UnitRenderer {
   readonly group = new THREE.Group();
@@ -45,6 +72,14 @@ export class UnitRenderer {
   private col = new THREE.Color();
   private up = new THREE.Vector3(0, 1, 0);
   private counts = new Map<string, number>();
+  private corpses: Corpse[] = [];
+  /** dive blend per flying melee unit: v = 0 cruising, 1 down among the ground troops */
+  private dives = new Map<number, { v: number; last: number }>();
+  private q2 = new THREE.Quaternion();
+  private axis = new THREE.Vector3();
+  private xAxis = new THREE.Vector3(1, 0, 0);
+  private zAxis = new THREE.Vector3(0, 0, 1);
+  private chunk: ChunkMotion = { dx: 0, dy: 0, dz: 0, ax: 0, ay: 1, az: 0, angle: 0 };
   private colors = new Map<number, string>();
   private tiers = new Map<number, Tier>();
 
@@ -109,13 +144,31 @@ export class UnitRenderer {
     const st = sim.cfg.unitTypes[u.type];
     const t = time + u.id * 0.37;
     const ground = this.map.heightAt(u.x, u.z);
-    const bob = st.flying ? 4.5 + Math.sin(t * 6.5) * 0.25 : u.moving ? Math.abs(Math.sin(t * 5.5)) * 0.05 : 0;
+    const bob = st.flying ? this.flyHeight(sim, u, time) + Math.sin(t * 6.5) * 0.25 : u.moving ? Math.abs(Math.sin(t * 5.5)) * 0.05 : 0;
     const grow = Math.min(1, (sim.t - u.bornAt) / 0.35);
     this.pos.set(u.x, ground + bob, u.z);
     this.q.setFromAxisAngle(this.up, u.heading);
     const s = VISUAL_SCALE * st.scale * (1 + (sim.kingdomById(u.kid)?.level ?? 1) * 0.02) * (0.4 + 0.6 * grow);
     this.scl.set(s, s, s);
     return out.compose(this.pos, this.q, this.scl);
+  }
+
+  /**
+   * Height a flying unit is drawn at. Ranged flyers (dragons) stay up; melee flyers (griffins) ease
+   * down while they are striking and climb back once they stop. Safe to call more than once a frame.
+   */
+  private flyHeight(sim: Sim, u: Unit, time: number) {
+    if (sim.cfg.unitTypes[u.type].ranged) return FLY_HEIGHT;
+    let d = this.dives.get(u.id);
+    if (!d) this.dives.set(u.id, (d = { v: 0, last: time }));
+    const dt = Math.min(Math.max(time - d.last, 0), 0.1);
+    d.last = time;
+    const since = sim.t - u.attackAt;
+    const want = since >= 0 && since < DIVE_HOLD ? 1 : 0;
+    // drop fast, climb slowly
+    d.v += (want - d.v) * Math.min(1, dt * (want ? 9 : 2.5));
+    const e = d.v * d.v * (3 - 2 * d.v);
+    return FLY_HEIGHT + (DIVE_HEIGHT - FLY_HEIGHT) * e;
   }
 
   /** Chain bone matrices for the pose in this.pose: world[i] = world[parent] * rest * T(pos) * R(rot). */
@@ -172,6 +225,8 @@ export class UnitRenderer {
         mesh.setColorAt(i, this.col);
       }
     }
+    this.drawCorpses(time);
+    if (this.dives.size > 64) for (const [id, d] of this.dives) if (time - d.last > 2) this.dives.delete(id);
     this.animator.endFrame();
     this.blobs.count = blobs;
     this.blobs.instanceMatrix.needsUpdate = true;
@@ -184,6 +239,106 @@ export class UnitRenderer {
         if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       }
     }
+  }
+
+  /** Number of corpses currently on the field (debugging and tests). */
+  get corpseCount() {
+    return this.corpses.length;
+  }
+
+  clearCorpses() {
+    this.corpses.length = 0;
+  }
+
+  /** Leave a corpse where a unit just died. `time` is the render clock used by update(). */
+  addCorpse(sim: Sim, e: Extract<SimEvent, { k: "death" }>, time: number) {
+    const st = sim.cfg.unitTypes[e.type];
+    if (!st) return;
+    const k = sim.kingdomById(e.kid);
+    const tier = tierOfLevel(k?.level ?? 1);
+    const spec = deathSpec(e.type, this.ensure(e.type, tier).baked.rig);
+    if (this.corpses.length >= CORPSE_MAX) {
+      // full: the oldest corpse that is still lying there starts sinking now
+      const lying = this.corpses.find((c) => time - c.diedAt < c.spec.life - SINK_SECONDS);
+      if (lying) lying.diedAt = time - (lying.spec.life - SINK_SECONDS);
+      if (this.corpses.length >= CORPSE_MAX * 2) this.corpses.shift();
+    }
+    this.corpses.push({
+      id: e.id,
+      type: e.type,
+      tier,
+      color: k?.color ?? "#ffffff",
+      x: e.x,
+      z: e.z,
+      ground: this.map.heightAt(e.x, e.z),
+      heading: e.heading,
+      scale: VISUAL_SCALE * st.scale * (1 + (k?.level ?? 1) * 0.02),
+      height: st.flying ? FLY_HEIGHT + (DIVE_HEIGHT - FLY_HEIGHT) * (this.dives.get(e.id)?.v ?? 0) : 0,
+      diedAt: time,
+      spec,
+    });
+  }
+
+  /** Append the corpses to the instance buffers (called from update, after the living). */
+  private drawCorpses(time: number) {
+    if (!this.corpses.length) return;
+    const counts = this.counts;
+    let kept = 0;
+    for (const c of this.corpses) {
+      const age = time - c.diedAt;
+      if (age >= c.spec.life) continue;
+      this.corpses[kept++] = c;
+      if (age < 0) continue;
+      const key = c.type + ":" + c.tier;
+      const tm = this.types.get(key) ?? this.ensure(c.type, c.tier);
+      const i = counts.get(key) ?? 0;
+      if (i >= CAPACITY) continue;
+      counts.set(key, i + 1);
+
+      const spec = c.spec;
+      const sink = sinkProgress(spec, age) * SINK_DEPTH;
+      const s = c.scale * dissolveScale(spec, age);
+      this.q.setFromAxisAngle(this.up, c.heading);
+      let y = c.ground - sink;
+      if (spec.style === "fall") {
+        const p = fallProgress(spec, age);
+        const side = fallSide(spec, c.id);
+        const angle = p * spec.maxAngle;
+        // backwards = rotate about the unit's own x axis, sideways = about its z (forward) axis
+        this.q2.setFromAxisAngle(side === 0 ? this.xAxis : this.zAxis, side === 0 ? -angle : side * angle);
+        this.q.multiply(this.q2);
+        y += c.height * (1 - Math.min(1, p)) + spec.lift * s * Math.sin(angle);
+      }
+      this.pos.set(c.x, y, c.z);
+      this.scl.set(s, s, s);
+      this.root.compose(this.pos, this.q, this.scl);
+      this.animator.poseDeath(tm.baked, age, this.pose);
+      this.chain(tm.baked, this.root);
+
+      this.col.set(c.color);
+      if (spec.style === "dissolve") this.col.lerp(EMBER, 1 - dissolveScale(spec, age));
+      else this.col.lerp(DEAD, 0.35 * Math.min(1, age / 1.2));
+      for (let b = 0; b < tm.meshes.length; b++) {
+        const mesh = tm.meshes[b];
+        if (!mesh) continue;
+        const m = this.world[b];
+        if (spec.style === "shatter") {
+          // each bone is a chunk: it flies off from its pivot, tumbles, and stops where it lands
+          const e = m.elements;
+          const px = e[12];
+          const py = e[13];
+          const pz = e[14];
+          const rest = c.ground + 0.12 * s;
+          const ch = chunkMotion(spec, c.id, b, age, py + sink - rest, this.chunk);
+          m.premultiply(this.local.makeTranslation(-px, -py, -pz));
+          m.premultiply(this.local.makeRotationAxis(this.axis.set(ch.ax, ch.ay, ch.az), ch.angle));
+          m.premultiply(this.local.makeTranslation(px + ch.dx, Math.max(py + ch.dy, rest - sink), pz + ch.dz));
+        }
+        mesh.setMatrixAt(i, m);
+        mesh.setColorAt(i, this.col);
+      }
+    }
+    this.corpses.length = kept;
   }
 
   /**
