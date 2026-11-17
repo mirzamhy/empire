@@ -245,3 +245,46 @@ describe("death and corpses", () => {
     expect(r.corpseCount).toBe(death.CORPSE_MAX);
   });
 });
+
+// v2 detail pass: every unit is detailed to the same depth, and the old set stays available.
+describe("model sets", () => {
+  it("v2 models sit in one detail band (no unit far plainer or busier than the rest)", async () => {
+    const { MODEL_SETS } = await import("../game/src/render/units/sets");
+    const tris = Object.entries(MODEL_SETS.v2).map(([name, b]) => [name, b!({ tier: 1, tint: "#ff00ff", crest: "#e8e2d0" }).meta.tris] as const);
+    const min = Math.min(...tris.map((t) => t[1]));
+    const max = Math.max(...tris.map((t) => t[1]));
+    expect(min, `plainest: ${tris.find((t) => t[1] === min)![0]}`).toBeGreaterThanOrEqual(1200);
+    expect(max / min, `busiest: ${tris.find((t) => t[1] === max)![0]}`).toBeLessThanOrEqual(1.75);
+  });
+
+  it("the archived v1 set still builds, with the same units and skeletons as v2", async () => {
+    const { MODEL_SETS } = await import("../game/src/render/units/sets");
+    expect(Object.keys(MODEL_SETS.v1).sort()).toEqual(Object.keys(MODEL_SETS.v2).sort());
+    for (const [name, b] of Object.entries(MODEL_SETS.v1)) {
+      const o = { tier: 2 as const, tint: "#ff00ff", crest: "#e8e2d0" };
+      const a = b!(o);
+      const n = MODEL_SETS.v2[name as UnitType]!(o);
+      expect(Object.keys(a.bones).sort(), name).toEqual(Object.keys(n.bones).sort());
+      expect(Object.keys(a.sockets).sort(), name).toEqual(Object.keys(n.sockets).sort());
+      expect(n.meta.tris, name).toBeGreaterThan(a.meta.tris);
+    }
+  });
+
+  it("the animator recoils when hit and shakes when stunned", () => {
+    const baked = rig.bakeModel("spearman", model("spearman"));
+    const a = new animator.Animator();
+    const pose = new Float32Array(baked.bones.length * animator.POSE_STRIDE);
+    const spine = baked.boneIndex.spine! * animator.POSE_STRIDE;
+    const head = baked.boneIndex.head! * animator.POSE_STRIDE;
+    const u = { id: 1, moving: false, attackAt: -9, hitAt: -9, stunUntil: 0 } as Parameters<typeof a.pose>[1];
+    a.pose(baked, u, 10, 10, pose);
+    const rest = pose[spine];
+    u.hitAt = 10 - animator.FLINCH_SECONDS / 2;
+    a.pose(baked, u, 10, 10, pose);
+    expect(pose[spine]).toBeLessThan(rest - 0.15);
+    u.hitAt = -9;
+    u.stunUntil = 11;
+    a.pose(baked, u, 10, 10, pose);
+    expect(pose[head]).toBeGreaterThan(0.2);
+  });
+});

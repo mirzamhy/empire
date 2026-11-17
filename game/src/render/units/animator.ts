@@ -4,6 +4,11 @@
 // V0 states: idle, walk (blended over ~0.1 s) and attack (overlay on the bones its clip names).
 // Corpses are posed with poseDeath(); they have no per-unit record.
 // V2 adds spawn, run, hit and cheer on top of the same records.
+//
+// Combat feel (v2 models): on top of the clips, compute() adds a small procedural layer that
+// needs no clip data: breathing, body bob and twist while walking, a guard stance for a few
+// seconds after a blow, a lunge with every melee attack, a recoil when hit, and a tremble while
+// stunned by lightning. It only touches bones the rig has, so every rig gets what fits it.
 import type { Unit } from "../../sim/world";
 import { clipFor, sampleKeys, type Clip, type ClipName } from "./anims";
 import type { BakedRig } from "./rig";
@@ -22,6 +27,10 @@ interface UnitAnim {
 /** Floats per bone in a pose buffer: rx, ry, rz, px, py, pz. */
 export const POSE_STRIDE = 6;
 export const ATTACK_SECONDS = 0.35;
+/** how long a hit makes a unit recoil, and how long it stays on guard after its last blow */
+export const FLINCH_SECONDS = 0.28;
+export const GUARD_SECONDS = 2.5;
+const WALK_RATE = 5.5; // matches HUMAN_WALK in anims.ts
 
 export class Animator {
   private units = new Map<number, UnitAnim>();
@@ -84,6 +93,81 @@ export class Animator {
       // fade out over the last quarter so the pose melts back into idle or walk
       const w = Math.min(1, (attack.length - since) / (attack.length * 0.25));
       this.apply(rig, attack, since, w, out);
+    }
+    this.feel(rig, u, t, simT, walk, since, attack?.length ?? ATTACK_SECONDS, out);
+  }
+
+  /** The procedural combat layer (see the header). Everything here is added to the clip pose. */
+  private feel(rig: BakedRig, u: Unit, t: number, simT: number, walk: number, since: number, attackLen: number, out: Float32Array) {
+    const B = rig.boneIndex;
+    const add = (bone: number | undefined, slot: number, v: number) => {
+      if (bone !== undefined) out[bone * POSE_STRIDE + slot] += v;
+    };
+    const legged = rig.rig === "humanoid" || rig.rig === "golem";
+    const heavy = rig.rig === "golem" ? 0.6 : 1;
+    // the bone that carries the whole upper body, and the one that carries everything
+    const trunk = B.spine ?? B.body;
+    const rootBone = B.hips ?? B.body ?? B.base;
+
+    if (legged) {
+      // breathing: chest and shoulders rise and fall, slower for big bodies
+      const breath = Math.sin(t * 1.9 * heavy);
+      add(B.spine, 0, 0.018 * breath * (1 - walk));
+      add(B.armR, 2, -0.02 * breath * (1 - walk));
+      add(B.armL, 2, 0.02 * breath * (1 - walk));
+      add(B.head, 0, -0.012 * breath * (1 - walk));
+      // walking: the body dips twice per stride, the shoulders counter the legs, the head stays level
+      const stride = t * WALK_RATE;
+      add(B.hips, 4, -0.05 * walk * Math.abs(Math.sin(stride)));
+      add(B.spine, 1, 0.09 * walk * Math.sin(stride));
+      add(B.spine, 0, 0.05 * walk);
+      add(B.head, 1, -0.07 * walk * Math.sin(stride));
+    }
+
+    const attacking = since >= 0 && since < attackLen;
+    if (legged) {
+      // guard: after a blow the unit stays low and braced, one foot forward, until the fight moves on
+      const rest = since - attackLen;
+      const guard = since < 0 ? 0 : attacking ? 1 : Math.max(0, 1 - rest / GUARD_SECONDS);
+      const g = guard * (1 - walk);
+      if (g > 0.001) {
+        add(B.hips, 4, -0.07 * g);
+        add(B.spine, 0, 0.09 * g);
+        add(B.legR, 0, 0.2 * g);
+        add(B.legL, 0, -0.22 * g);
+        add(B.head, 0, -0.06 * g);
+      }
+      // lunge: weight goes into every strike and comes back
+      if (attacking) {
+        const k = Math.sin(Math.PI * Math.min(1, since / (attackLen * 0.7)));
+        add(B.hips, 5, 0.14 * heavy * k);
+        add(B.legL, 0, -0.16 * k);
+        add(B.legR, 0, 0.12 * k);
+      }
+    }
+
+    // recoil when hit: the upper body snaps back and the whole unit is pushed a little
+    const hit = simT - u.hitAt;
+    if (hit >= 0 && hit < FLINCH_SECONDS) {
+      const k = Math.sin((Math.PI * hit) / FLINCH_SECONDS) * (attacking ? 0.5 : 1) * heavy;
+      if (rig.rig === "siege") add(rootBone, 2, 0.03 * k * Math.sin(hit * 60));
+      else {
+        add(trunk, 0, (legged ? -0.24 : -0.06) * k);
+        add(B.head, 0, -0.18 * k);
+        add(rootBone, 5, -0.1 * k);
+        add(B.armL, 0, 0.25 * k * (legged ? 1 : 0));
+      }
+    }
+
+    // stunned by lightning: head drops, the body shakes
+    if (u.stunUntil > simT) {
+      const shake = Math.sin(t * 43 + u.id);
+      add(trunk, 2, 0.05 * shake);
+      add(B.head, 0, 0.3);
+      add(B.head, 2, 0.08 * Math.sin(t * 37));
+      add(B.armR, 2, -0.06 * shake);
+      add(B.armL, 2, 0.06 * shake);
+      add(rootBone, 3, 0.012 * shake);
     }
   }
 
