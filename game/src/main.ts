@@ -31,8 +31,8 @@ const terrain = buildTerrain(map, Math.min(1.5, Math.max(0.2, Number(params.get(
 view.scene.add(terrain.group);
 
 const sim = new Sim(loadConfig(), map, Number(params.get("seed") ?? (Date.now() & 0xffff)));
-const castles = new CastleRenderer(map, (x, z) => terrain.clearTrees(x, z, 5));
-const villages = new VillageRenderer(map, (x, z) => terrain.clearTrees(x, z, 7.5));
+const castles = new CastleRenderer(map, (x, z) => terrain.clearTrees(x, z, 7));
+const villages = new VillageRenderer(map, (x, z) => terrain.clearTrees(x, z, 9));
 const units = new UnitRenderer(map);
 units.warmup();
 const fx = new Fx(map);

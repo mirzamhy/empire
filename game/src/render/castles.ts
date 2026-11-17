@@ -2,7 +2,7 @@
 import * as THREE from "three";
 import type { WorldMap } from "../sim/map";
 import type { Sim } from "../sim/world";
-import { buildCastle, buildShield } from "./castle";
+import { buildCastle, buildShield, castleScale } from "./castle";
 
 interface CastleView {
   group: THREE.Group;
@@ -61,7 +61,7 @@ export class CastleRenderer {
         v.lastHp = k.hp;
         const h = time - v.hitAt;
         const squash = h >= 0 && h < 0.18 ? Math.sin((h / 0.18) * Math.PI) * 0.035 : 0;
-        const base = 1 + Math.min(v.level, 10) * 0.07; // same as buildCastle
+        const base = castleScale(v.level);
         v.group.scale.set(base * (1 + squash), base * (1 - squash), base * (1 + squash));
         v.group.rotation.z = squash * Math.sin(time * 60) * 0.6;
         v.group.children.forEach((c) => {
@@ -81,7 +81,7 @@ export class CastleRenderer {
     group.add(shield);
     if (crown) {
       const c = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.6, 5), new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
-      c.position.y = 6.2;
+      c.position.y = (group.userData.top as number) + 0.6;
       group.add(c);
     }
     return { group, level, shield, crown, fallingSince: -1, lastHp: Infinity, hitAt: -9 };
