@@ -124,3 +124,11 @@ Format: `D-xxx` · tanggal · keputusan · alasan. Keputusan baru ditambah di ba
 - Relief `alpine`, tema `vivid`, 6 sungai, 10 landmark termasuk Gerbang Batu Merah dan Mahkota Es, serta awan di atas pegunungan.
 - Peta 1 sampai 3 tetap bisa dibuka dengan `?map=1|2|3`.
 - Balance belum disetel: pada 8 seed standar dengan 20 kerajaan, 4 ronde di peta 4 berjalan sampai batas 960 detik dan masih menyisakan 2 sampai 4 kerajaan; di peta 3 semua selesai lebih cepat (496 sampai 850 detik).
+
+## D-033: Peta 5 "Teluk Naga" menjadi peta bawaan (2026-11-19)
+
+- Dijiplak dari gambar referensi `attachments/peta5-referensi.jpg` dengan `tools/trace-map5.py` ke grid 384 x 288, sama dengan peta 2 sampai 4.
+- Isi: teluk spiral, gletser di utara, barisan gunung dan danau di tengah, mesa merah di timur, rawa di tenggara. Memakai relief `alpine` dan tema `vivid` dari peta 4, jadi tidak ada bioma baru.
+- Kolam rawa dibuat sendiri karena di gambar tertutup tanaman. Lembah di dalam pegunungan juga dibuat dengan noise.
+- 6 sungai bernama (9 ruas) dan 10 landmark. Peta 1 sampai 4 tetap bisa dibuka dengan `?map=1|2|3|4`.
+- Balance belum disetel: pada 8 seed dengan 20 kerajaan, 4 ronde selesai dengan satu pemenang (603 sampai 767 detik) dan 4 ronde berjalan sampai batas 960 detik dengan 2 sampai 3 kerajaan tersisa.
