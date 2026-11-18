@@ -1,6 +1,7 @@
 // Look of the active map: ground and leaf colours, water, height bands, minimap colours and the
 // mood of every round phase. "bright" is the first map (daylight, desert, palms); "dark" is the
-// wooded continent of maps 2 and 3, a shade darker and cooler so kingdom colours stand out.
+// wooded continent of maps 2 and 3, a shade darker and cooler so kingdom colours stand out;
+// "vivid" is map 4: deep blue sea, bright meadows, snow in the north and a red desert in the east.
 import type { Biome } from "../sim/map";
 import { ACTIVE } from "../sim/maps";
 import type { Phase } from "../sim/world";
@@ -23,7 +24,7 @@ export interface Mood {
 }
 
 export interface Theme {
-  id: "bright" | "dark";
+  id: "bright" | "dark" | "vivid";
   /** two tones per biome; a 40 m noise picks between them */
   ground: Record<Biome, [number, number]>;
   rock: number;
@@ -52,6 +53,8 @@ const BRIGHT: Theme = {
     desert: [0xdba556, 0xc98a3c],
     forest: [0x55833a, 0x3e6b2f],
     mountain: [0x8d7e6c, 0x74675a],
+    snow: [0xf0f4f6, 0xdde7ec],
+    mesa: [0xb8603f, 0x9c4f35],
   },
   rock: 0x80776b,
   rockDark: 0x5a524b,
@@ -77,7 +80,7 @@ const BRIGHT: Theme = {
     fern: [0x4f9a3a, 0x5fa844],
     log: [0x5a7a3a],
   },
-  minimap: { water: "#1f4e5c", beach: "#cdb98a", plains: "#a9a06c", desert: "#c98b42", forest: "#4f7a34", mountain: "#6e6152" },
+  minimap: { water: "#1f4e5c", beach: "#cdb98a", plains: "#a9a06c", desert: "#c98b42", forest: "#4f7a34", mountain: "#6e6152", snow: "#e8eef2", mesa: "#a8563a" },
   //   LOBBY = morning, low sun from the east · WAR = clear midday · FINAL = low orange sun · RESULT = dusk
   moods: {
     LOBBY: { sun: 0xffe2b0, sunPower: 1.25, sunFrom: [190, 150, 70], skyLight: 0xffeed8, groundLight: 0x4a5540, ambient: 0.9, rim: 0.3, fog: 0x9fbfc4, skyTop: 0x4f8fb5, cloud: 0.2, exposure: 1.0 },
@@ -103,6 +106,8 @@ const DARK: Theme = {
     desert: [0x87764a, 0x74603a], // dry moor (the "desert" biome of these maps)
     forest: [0x34602c, 0x254a26],
     mountain: [0x6c655b, 0x585149],
+    snow: [0xd5dde0, 0xc2ccd2],
+    mesa: [0x8a5240, 0x744434],
   },
   rock: 0x716a61,
   rockDark: 0x4c4640,
@@ -129,7 +134,7 @@ const DARK: Theme = {
     fern: [0x3f7a30, 0x4c8636, 0x356a2e],
     log: [0x4a6a34, 0x55703a],
   },
-  minimap: { water: "#143845", beach: "#a89a7c", plains: "#768c4a", desert: "#86744a", forest: "#2f5a2a", mountain: "#7a7268" },
+  minimap: { water: "#143845", beach: "#a89a7c", plains: "#768c4a", desert: "#86744a", forest: "#2f5a2a", mountain: "#7a7268", snow: "#cfd8dc", mesa: "#855040" },
   //   LOBBY = misty dawn · WAR = overcast noon · FINAL = low red sun, long shadows · RESULT = dusk
   moods: {
     LOBBY: { sun: 0xffd6a0, sunPower: 1.1, sunFrom: [190, 130, 70], skyLight: 0xd9e2d2, groundLight: 0x2c3a30, ambient: 0.68, rim: 0.3, fog: 0x6f8c88, skyTop: 0x35596c, cloud: 0.3, exposure: 0.96 },
@@ -145,4 +150,41 @@ const DARK: Theme = {
   },
 };
 
-export const THEME: Theme = ACTIVE.theme === "bright" ? BRIGHT : DARK;
+const VIVID: Theme = {
+  id: "vivid",
+  ground: {
+    water: [0x2f8aa0, 0x1a5684],
+    beach: [0xf0e2b8, 0xe2cf9c],
+    plains: [0x93c447, 0x79ae3e],
+    desert: [0xecce90, 0xdeb26c],
+    forest: [0x427f33, 0x2f6c2e],
+    mountain: [0x8e867a, 0x70685f],
+    snow: [0xf4f8fa, 0xe0eaf0],
+    mesa: [0xc8623c, 0xac4d30],
+  },
+  rock: 0x8c847a,
+  rockDark: 0x5f5850,
+  wetSand: 0xcbb484,
+  snowLine: 30,
+  treeLine: 23,
+  woodedSlopes: true,
+  deepSea: 0x0e3a70,
+  water: { shallow: 0x46c6d2, mid: 0x1f78b2, deep: 0x124c8e },
+  leaf: {
+    ...BRIGHT.leaf,
+    pine: [0x1e6636, 0x25703a, 0x1a5a32, 0x2a7640],
+    pineTall: [0x195c34, 0x1f683c, 0x165030],
+    pineSnow: [0x2c6c50, 0x356f58],
+    grass: [0x9cc24e, 0xb0c85c, 0x86b044],
+  },
+  minimap: { water: "#174a80", beach: "#ead9a8", plains: "#86b444", desert: "#e2c080", forest: "#35702f", mountain: "#807769", snow: "#eef3f6", mesa: "#b85a3a" },
+  moods: BRIGHT.moods,
+  day: {
+    pagi: { ...BRIGHT.day.pagi, fog: 0xb4cfe0, skyTop: 0x5a9ed4 },
+    siang: { ...BRIGHT.day.siang, sunPower: 1.5, fog: 0x86b9de, skyTop: 0x2f7cc8 },
+    sore: { ...BRIGHT.day.sore, fog: 0xd8a488, skyTop: 0x5c6cb0 },
+    malam: BRIGHT.day.malam,
+  },
+};
+
+export const THEME: Theme = ACTIVE.theme === "bright" ? BRIGHT : ACTIVE.theme === "vivid" ? VIVID : DARK;

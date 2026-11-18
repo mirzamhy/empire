@@ -19,7 +19,7 @@ describe("world map", () => {
       const p = map.sampleSpawn(rng, taken);
       expect(p).not.toBeNull();
       const b = map.biomeAt(p!.x, p!.z);
-      expect(["plains", "desert", "forest"]).toContain(b);
+      expect(["plains", "desert", "forest", "snow"]).toContain(b);
       taken.push(p!);
     }
     for (let i = 0; i < taken.length; i++)

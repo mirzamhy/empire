@@ -398,8 +398,53 @@ function lighthouseV1(): THREE.Group {
   return g;
 }
 
+/** Natural arch of red sandstone, banded by its layers, with fallen blocks at its feet. 17 m. */
+function sandArch(): THREE.Group {
+  const g = new THREE.Group();
+  const red = lambert(0xb9583a);
+  const dark = lambert(0x8e412e);
+  const pale = lambert(0xd38f62);
+  for (const s of [-1, 1]) {
+    part(g, taperBox(6, 3.8, 11, 4.6, 3.2), red, s * 7.2, 5.5, 0, 0, 0, s * 0.05);
+    for (let i = 0; i < 3; i++) part(g, taperBox(6.1 - i * 0.7, 5.6 - i * 0.7, 0.7, 4.7 - i * 0.45, 4.3 - i * 0.45), i % 2 ? pale : dark, s * (7.3 - i * 0.04), 1.8 + i * 3, 0);
+  }
+  const n = 9;
+  for (let i = 0; i < n; i++) {
+    const a = Math.PI * ((i + 0.5) / n);
+    part(g, box(3.5, 2.7 - Math.sin(a) * 0.6, 3.1), i % 3 === 1 ? pale : i % 3 ? dark : red, Math.cos(a) * 7.2, 11 + Math.sin(a) * 4.4, 0, 0, 0, a + Math.PI / 2);
+  }
+  const rocks: number[][] = [[-11.5, 0.7, 3, 1.8], [10.8, 0.6, -3.2, 1.5], [3, 0.4, 3.4, 1.1], [-3.2, 0.5, -3.5, 1.3], [12, 0.4, 2.8, 0.9]];
+  for (const [x, y, z, r] of rocks) part(g, ico(r), r > 1.2 ? red : dark, x, y, z, x, z, y).scale.y = 0.72;
+  return g;
+}
+
+/** Crown of ice crystals around a glowing heart, on a ring of old stones. 15 m. */
+function iceSpire(): THREE.Group {
+  const g = new THREE.Group();
+  const ice = lambert(0xc4e9f6);
+  const deep = lambert(0x82bcdf);
+  const stone = lambert(STONE_DARK);
+  part(g, cyl(6.4, 7, 0.9, 9), stone, 0, 0.3, 0);
+  part(g, cyl(4.4, 5, 0.7, 9), lambert(STONE), 0, 0.95, 0);
+  part(g, cone(2.1, 14, 6), ice, 0, 8, 0);
+  part(g, cone(1.5, 10, 5), deep, 1.1, 6, -0.7, 0.08, 0.5, -0.12);
+  const n = 8;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const h = 5 + ((i * 5) % 4) * 1.1;
+    const lean = 0.2 + (i % 3) * 0.05;
+    part(g, cone(0.95, h, 5), i % 2 ? ice : deep, Math.cos(a) * 3.6, 1.1 + h * 0.44, Math.sin(a) * 3.6, Math.sin(a) * lean, a, -Math.cos(a) * lean);
+  }
+  part(g, new THREE.OctahedronGeometry(1, 0), glow(0xd9f7ff), 0, 3.1, 3.05);
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 + 0.4;
+    part(g, taperBox(1, 0.6, 1.9, 0.7), stone, Math.cos(a) * 5.9, 1.4, Math.sin(a) * 5.9, 0, -a);
+  }
+  return g;
+}
+
 const BUILD: Record<LandmarkKind, () => THREE.Group> = {
-  dragonBones, watchtower, ruins, greatTree, stoneCircle,
+  dragonBones, watchtower, ruins, greatTree, stoneCircle, sandArch, iceSpire,
   lighthouse: () => (modelSet() === "v1" ? lighthouseV1() : lighthouse()),
 };
 

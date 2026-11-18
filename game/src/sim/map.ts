@@ -9,15 +9,21 @@ const MAP_W = ACTIVE.w;
 const MAP_H = ACTIVE.h;
 const MAP_ROWS = ACTIVE.rows;
 
-export type Biome = "water" | "beach" | "plains" | "desert" | "forest" | "mountain";
-const CODE: Record<string, Biome> = { "~": "water", b: "beach", s: "plains", d: "desert", f: "forest", m: "mountain" };
+export type Biome = "water" | "beach" | "plains" | "desert" | "forest" | "mountain" | "snow" | "mesa";
+const CODE: Record<string, Biome> = { "~": "water", b: "beach", s: "plains", d: "desert", f: "forest", m: "mountain", n: "snow", r: "mesa" };
 
+/** narrow, sharp ranges rise faster than the broad ones of the forest maps */
+const ALPINE = ACTIVE.terrain === "alpine";
 /** foothill ramp around a range: width in cells and the height it reaches at the rock line */
-const FOOTHILL_CELLS = 26;
-const FOOTHILL_HEIGHT = 8.5;
+const FOOTHILL_CELLS = ALPINE ? 18 : 26;
+const FOOTHILL_HEIGHT = ALPINE ? 7 : 8.5;
 /** depth inside a range (cells) at which it reaches full height, and that height above the foothills */
-const PEAK_CELLS = 20;
-const PEAK_HEIGHT = 27;
+const PEAK_CELLS = ALPINE ? 16 : 20;
+const PEAK_HEIGHT = ALPINE ? 29 : 27;
+/** crest lines and spurs are stronger on alpine ranges */
+const CREST = ALPINE ? 1.4 : 1;
+/** height of one rock step on a mesa */
+const MESA_STEP = 2.6;
 
 /** metres per grid cell */
 export const CELL = 2.25;
@@ -70,6 +76,7 @@ export class WorldMap {
     const distRock = this.bfs((i) => this.biome[i] !== "mountain", () => true); // depth inside mountains
     const distMtn = this.bfs((i) => this.biome[i] === "mountain", () => true); // distance to nearest mountain
     const distLand = this.bfs((i) => this.biome[i] !== "water", () => true); // depth of the sea floor
+    const distMesa = this.bfs((i) => this.biome[i] !== "mesa", () => true); // depth inside red rock
     for (let i = 0; i < n; i++) {
       const b = this.biome[i];
       const x = i % GRID_W;
@@ -102,8 +109,9 @@ export class WorldMap {
         this.height[i] = hgt;
         continue;
       }
-      if (b === "desert") hgt += ridge(x / 9 + y / 30, y / 14) * 0.7 * inland; // moor hummocks
+      if (b === "desert") hgt += ridge(x / 9 + y / 30, y / 14) * (ALPINE ? 1.5 : 0.7) * inland; // moor hummocks, or dunes
       if (b === "forest") hgt += 0.15;
+      if (b === "snow") hgt += (0.8 + vnoise(x / 11 + 5, y / 11) * 1.8) * inland; // drifts
       // foothills: a long ramp of rolling hills leads up to every range (about 60 m wide, 9 m high)
       // so a mountain never rises straight out of flat ground
       const foot = b === "mountain" ? 1 : (1 - smoothstep(0, FOOTHILL_CELLS, distMtn[i])) ** 1.5;
@@ -116,8 +124,13 @@ export class WorldMap {
         const core = smoothstep(0, PEAK_CELLS, distRock[i]);
         hgt += PEAK_HEIGHT * core ** 1.2;
         // crest lines and spurs only where the range is already high
-        hgt += ridge(x / 15, y / 15) * 7 * core + ridge(x / 6 + 17, y / 6) * 2.4 * core;
+        hgt += (ridge(x / 15, y / 15) * 7 + ridge(x / 6 + 17, y / 6) * 2.4) * core * CREST;
         hgt += vnoise(x / 2.5, y / 2.5) * 0.9 * smoothstep(0, 5, distRock[i]);
+      }
+      if (b === "mesa") {
+        // red rock: rises quickly from the sand and breaks into flat steps
+        const raw = hgt + (9 + vnoise(x / 14 + 3, y / 14) * 8) * smoothstep(0, 5, distMesa[i]);
+        hgt = raw * 0.35 + Math.floor(raw / MESA_STEP) * MESA_STEP * 0.65;
       }
       this.height[i] = hgt;
     }
@@ -165,7 +178,7 @@ export class WorldMap {
           const i = y * GRID_W + x;
           if (this.component[i] !== best || this.riverBank[i] < d.r + 5) continue;
           const b = this.biome[i];
-          if (b === "water" || b === "mountain") continue;
+          if (b === "water" || b === "mountain" || b === "mesa") continue;
           if (d.on === "low" && (b === "beach" || distMtn[i] < rc + 6 || distWater[i] < rc + 2)) continue;
           if (d.on === "foot" && (distMtn[i] < rc * 0.5 + 1 || distMtn[i] > rc + 8 || distWater[i] < rc + 2)) continue;
           if (d.on === "shore" && (distWater[i] < 2 || distWater[i] > 5)) continue;
@@ -200,7 +213,7 @@ export class WorldMap {
     for (let i = 0; i < n; i++) {
       const b = this.biome[i];
       if (this.component[i] !== best) continue;
-      if (b === "water" || b === "mountain" || b === "beach") continue;
+      if (b === "water" || b === "mountain" || b === "beach" || b === "mesa") continue;
       if (distMtn[i] < mtnClear || distWater[i] < 3) continue;
       // nor in a river or on a landmark
       if (this.riverBank[i] < 2 * CELL) continue;
@@ -333,7 +346,7 @@ export class WorldMap {
   /** Movement speed factor for a biome. */
   speedFactor(x: number, z: number) {
     const b = this.biomeAt(x, z);
-    return b === "mountain" ? 0.6 : b === "forest" ? 0.9 : 1;
+    return b === "mountain" || b === "mesa" ? 0.6 : b === "forest" || b === "snow" ? 0.9 : 1;
   }
 
   /**
