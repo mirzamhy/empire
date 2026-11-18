@@ -65,6 +65,26 @@ export const swapsLight = (b: DayBlend) => b.from === "malam" || b.to === "malam
 /** Light strength during a swap: gone around the middle, so the shadows never swing across the map. */
 export const swapPower = (k: number) => smooth(0.08, 0.35, Math.abs(k - 0.5));
 
+/** Moments of the day (0..1) when the light is out and the sun and moon change places. */
+const DAWN_SWAP = (3 + (HOLD + 1) / 2) / TIMES.length;
+const DUSK_SWAP = (2 + (HOLD + 1) / 2) / TIMES.length;
+
+/**
+ * Where the light comes from, relative to the view: the sun climbs from the east, stands high at
+ * noon and sinks in the west, a little to the south so the faces the camera sees are lit. The moon
+ * takes a lower arc behind the map at night. It never drops so low that shadows cross the map.
+ */
+export function sunArc(clock: number): [number, number, number] {
+  const sinceDawn = (clock - DAWN_SWAP + 1) % 1;
+  const dayLength = (DUSK_SWAP - DAWN_SWAP + 1) % 1;
+  if (sinceDawn < dayLength) {
+    const a = Math.PI * (sinceDawn / dayLength);
+    return [Math.cos(a) * 215, Math.max(75, Math.sin(a) * 230), 85];
+  }
+  const a = Math.PI * ((sinceDawn - dayLength) / (1 - dayLength));
+  return [Math.cos(a) * 150, Math.max(120, Math.sin(a) * 195), -90];
+}
+
 /** 0 by day, 1 at full night. */
 export function nightOf(b: DayBlend): number {
   if (b.from === "malam") return 1 - b.k;
