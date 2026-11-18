@@ -116,3 +116,11 @@ Format: `D-xxx` · tanggal · keputusan · alasan. Keputusan baru ditambah di ba
   - Sungai kini benar-benar menyatu dengan danau dan laut. Sebelumnya ada pita pasir dan garis buih di muara. Dasar sungai boleh turun sampai -0,45 m (danau dan laut di -0,25 m), menurun bertahap pada 30 m terakhir, sehingga air danau masuk ke alur; pita sungai dipanjangkan empat sel ke dalam air; buih dan warna dangkal dimatikan di muara. Ruas yang keluar dari danau seluruhnya sejajar permukaan danau. `heightAt` mengizinkan tanah di bawah nol hanya di alur sungai.
   - Pohon peta 3 didetailkan (`detailedTrees`): cemara empat sampai lima tingkat yang diputar dan dimiringkan, batang terlihat di bawah; pohon daun lebar dengan tiga gumpal tajuk dan dahan; birch bergelang; bagian bawah lebih gelap dan pucuk lebih terang; lantai hutan berisi pakis, tunggul, dan batang tumbang. Peta 1 dan 2 tetap memakai pohon lama. `?trees=simple` mengembalikan pohon lama di peta 3.
   - Biaya detail pohon: segitiga yang digambar naik dari 1,48 juta ke 1,86 juta (26%). Di PC ini, pada 1024 x 768, satu frame overview 9,9 ms menjadi 10,1 ms dan tampilan dekat 7,8 ms menjadi 9,1 ms. PC streaming belum diukur.
+
+## D-032: Peta 4 "Tiga Alam" menjadi peta bawaan (2026-11-18)
+
+- Dijiplak dari gambar referensi pengguna ke grid 384 x 288 (864 x 648 m), sama dengan peta 2 dan 3, supaya cocok untuk layar potret dan kamera tidak perlu diubah.
+- Tiga alam: salju di utara, tanah hijau di tengah, gurun dan mesa merah di timur laut. Bioma baru: `snow` (bisa ditempati kastil, kecepatan 0,9) dan `mesa` (tidak bisa ditempati kastil, kecepatan 0,6).
+- Relief `alpine`, tema `vivid`, 6 sungai, 10 landmark termasuk Gerbang Batu Merah dan Mahkota Es, serta awan di atas pegunungan.
+- Peta 1 sampai 3 tetap bisa dibuka dengan `?map=1|2|3`.
+- Balance belum disetel: pada 8 seed standar dengan 20 kerajaan, 4 ronde di peta 4 berjalan sampai batas 960 detik dan masih menyisakan 2 sampai 4 kerajaan; di peta 3 semua selesai lebih cepat (496 sampai 850 detik).

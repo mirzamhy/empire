@@ -79,7 +79,7 @@ node tools/gen-map.mjs
 
 ## 3. Definisi peta
 
-`sim/maps.ts` berisi tiga peta. Satu peta aktif per muat halaman (`?map=1|2|3`) atau per proses
+`sim/maps.ts` berisi empat peta. Satu peta aktif per muat halaman (`?map=1|2|3|4`) atau per proses
 (`EMPIRE_MAP=3`).
 
 | Peta | Grid | Relief | Tema | Sungai | Landmark | Atmosfer | Pohon detail |
@@ -87,6 +87,11 @@ node tools/gen-map.mjs
 | 1 Benua Klasik | 256 x 192 (576 x 432 m) | classic | bright | tidak | tidak | tidak | tidak |
 | 2 Hutan Gelap | 384 x 288 (864 x 648 m) | wild | dark | tidak | tidak | tidak | tidak |
 | 3 Hutan Sungai | 384 x 288 | wild | dark | 4 sungai | 7 | ya | ya |
+| 4 Tiga Alam | 384 x 288 | alpine | vivid | 6 sungai | 10 | ya, dengan awan | ya |
+
+Peta 4 dijiplak dengan `tools/trace-map4.py` dari `notes/attachments/peta4-referensi.jpg` dan
+menambah dua bioma: `n` padang salju dan `r` mesa merah. Rancangannya ada di
+`notes/rencana-peta-4.md`.
 
 Prinsipnya: **peta baru tidak menimpa peta lama**. Fitur baru dipasang lewat bendera di
 `MapDef`, jadi peta lama tetap bisa dimainkan dan dibandingkan.
