@@ -158,7 +158,7 @@ class DriftLayer {
   private vel = new THREE.Vector3();
   private c = new THREE.Color();
 
-  constructor(private presets: Record<Phase, Drift>, additive: boolean) {
+  constructor(additive: boolean) {
     const seed = new Float32Array(PARTICLES * 3);
     let s = additive ? 977 : 311;
     for (let i = 0; i < seed.length; i++) seed[i] = (s = (s * 16807) % 2147483647) / 2147483647;
@@ -218,8 +218,7 @@ void main() {
     this.points.renderOrder = 5;
   }
 
-  update(phase: Phase, t: number, dt: number, centre: THREE.Vector3, ground: number, fade: number, pixels: number) {
-    const d = this.presets[phase];
+  update(d: Drift, t: number, dt: number, centre: THREE.Vector3, ground: number, fade: number, pixels: number) {
     const k = 1 - Math.exp(-dt / 1.5);
     const u = this.u;
     (u.uColor.value as THREE.Color).lerp(this.c.set(d.color), k);
@@ -247,8 +246,8 @@ export class Life {
   private mistColor = new THREE.Color(0xdfe8e4);
   private birds: THREE.InstancedMesh;
   private flocks: Flock[] = [];
-  private matt = new DriftLayer(MATT, false);
-  private glow = new DriftLayer(GLOW, true);
+  private matt = new DriftLayer(false);
+  private glow = new DriftLayer(true);
   /** where troops have been dying lately; the crows circle it */
   private dead = new THREE.Vector3();
   private deaths = 0;
@@ -326,12 +325,13 @@ export class Life {
   /**
    * @param focus point on the ground the camera is looking at
    * @param haze current fog colour (the mist takes a lighter shade of it)
+   * @param night 0 by day, 1 at full night: birds roost, mist settles, fireflies come out
    */
-  update(phase: Phase, t: number, dt: number, camera: THREE.PerspectiveCamera, focus: THREE.Vector3, haze: THREE.Color, viewportHeight: number) {
+  update(phase: Phase, t: number, dt: number, camera: THREE.PerspectiveCamera, focus: THREE.Vector3, haze: THREE.Color, viewportHeight: number, night = 0) {
     this.time.value = t;
     const k = 1 - Math.exp(-dt / 3);
-    this.mistDensity.value += (MIST[phase] - this.mistDensity.value) * k;
-    this.mistColor.copy(haze).lerp(this.c.set(0xffffff), 0.42);
+    this.mistDensity.value += (MIST[phase] + night * 0.14 - this.mistDensity.value) * k;
+    this.mistColor.copy(haze).lerp(this.c.set(0xffffff), 0.42 * (1 - 0.75 * night));
     this.deaths = Math.max(0, this.deaths - dt * 0.5);
 
     // crows gather only in the final phase, once enough have fallen
@@ -363,7 +363,7 @@ export class Life {
         const hz = fleeing ? dz / dist : Math.cos(a) * dir;
         this.e.set(0, Math.atan2(hx, hz), fleeing ? 0 : -0.35 * dir, "YXZ");
         this.q.setFromEuler(this.e);
-        const size = (f.crows ? 1.15 : 0.95) * show;
+        const size = f.crows ? 1.15 * show : 0.95 * (1 - night);
         this.m.compose(this.v, this.q, this.s.set(size, size, size));
         this.birds.setMatrixAt(f.first + i, this.m);
       }
@@ -375,7 +375,7 @@ export class Life {
     const ground = Math.max(0, this.map.heightAt(focus.x, focus.z));
     const fade = 1 - smooth(110, 240, camera.position.distanceTo(focus));
     const pixels = viewportHeight / (2 * Math.tan((camera.fov * Math.PI) / 360));
-    this.matt.update(phase, t, dt, focus, ground, fade, pixels);
-    this.glow.update(phase, t, dt, focus, ground, fade, pixels);
+    this.matt.update(MATT[phase], t, dt, focus, ground, fade * (1 - 0.7 * night), pixels);
+    this.glow.update(night > 0.5 && GLOW[phase] === NONE ? GLOW.RESULT : GLOW[phase], t, dt, focus, ground, fade, pixels);
   }
 }
