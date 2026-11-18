@@ -4,6 +4,7 @@
 import type { Biome } from "../sim/map";
 import { ACTIVE } from "../sim/maps";
 import type { Phase } from "../sim/world";
+import type { TimeOfDay } from "./daycycle";
 
 export interface Mood {
   sun: number;
@@ -38,6 +39,8 @@ export interface Theme {
   leaf: Record<string, number[]>;
   minimap: Record<Biome, string>;
   moods: Record<Phase, Mood>;
+  /** the day cycle of the lobby and the war (render/daycycle.ts) */
+  day: Record<TimeOfDay, Mood>;
 }
 
 const BRIGHT: Theme = {
@@ -81,6 +84,13 @@ const BRIGHT: Theme = {
     WAR: { sun: 0xfff1d6, sunPower: 1.4, sunFrom: [110, 220, 95], skyLight: 0xfff4dc, groundLight: 0x3a4a3f, ambient: 0.95, rim: 0.3, fog: 0x6fa6ba, skyTop: 0x2f6fa5, cloud: 0.22, exposure: 1.0 },
     FINAL: { sun: 0xff9b5a, sunPower: 1.45, sunFrom: [-200, 120, 60], skyLight: 0xffc9a0, groundLight: 0x3b2f45, ambient: 0.8, rim: 0.4, fog: 0xc58a6e, skyTop: 0x5a4a8f, cloud: 0.3, exposure: 1.05 },
     RESULT: { sun: 0xc58cff, sunPower: 0.85, sunFrom: [-90, 150, -130], skyLight: 0x8f8fd0, groundLight: 0x1f1a33, ambient: 0.75, rim: 0.5, fog: 0x2f2850, skyTop: 0x14102e, cloud: 0.1, exposure: 1.0 },
+  },
+  day: {
+    pagi: { sun: 0xffcf9a, sunPower: 1.25, sunFrom: [190, 130, 70], skyLight: 0xffe6d0, groundLight: 0x4a5540, ambient: 0.86, rim: 0.3, fog: 0xc4c6c0, skyTop: 0x5f9cc0, cloud: 0.2, exposure: 1.0 },
+    siang: { sun: 0xfff1d6, sunPower: 1.4, sunFrom: [110, 220, 95], skyLight: 0xfff4dc, groundLight: 0x3a4a3f, ambient: 0.95, rim: 0.3, fog: 0x6fa6ba, skyTop: 0x2f6fa5, cloud: 0.22, exposure: 1.0 },
+    sore: { sun: 0xffb070, sunPower: 1.35, sunFrom: [-190, 125, 70], skyLight: 0xffd6b0, groundLight: 0x40343f, ambient: 0.85, rim: 0.35, fog: 0xd29a78, skyTop: 0x5f6aa5, cloud: 0.26, exposure: 1.0 },
+    // moonlight: blue and dim, but troops and kingdom colours must still read on a phone
+    malam: { sun: 0xa6bdff, sunPower: 0.6, sunFrom: [120, 190, -90], skyLight: 0x7088cc, groundLight: 0x161e34, ambient: 0.6, rim: 0.45, fog: 0x101a30, skyTop: 0x060a1c, cloud: 0.08, exposure: 1.0 },
   },
 };
 
@@ -126,6 +136,12 @@ const DARK: Theme = {
     WAR: { sun: 0xf4ead6, sunPower: 1.25, sunFrom: [120, 200, 95], skyLight: 0xcddacd, groundLight: 0x26342c, ambient: 0.7, rim: 0.32, fog: 0x4a6a6e, skyTop: 0x27485c, cloud: 0.38, exposure: 0.96 },
     FINAL: { sun: 0xff8648, sunPower: 1.35, sunFrom: [-200, 110, 60], skyLight: 0xdfa684, groundLight: 0x2c2236, ambient: 0.58, rim: 0.4, fog: 0x86564a, skyTop: 0x372c5e, cloud: 0.36, exposure: 1.0 },
     RESULT: { sun: 0xb58cf0, sunPower: 0.8, sunFrom: [-90, 150, -130], skyLight: 0x8080c0, groundLight: 0x18142a, ambient: 0.62, rim: 0.5, fog: 0x231f3e, skyTop: 0x0f0c24, cloud: 0.1, exposure: 0.98 },
+  },
+  day: {
+    pagi: { sun: 0xffc48c, sunPower: 1.15, sunFrom: [190, 115, 70], skyLight: 0xe8dccb, groundLight: 0x2c3a30, ambient: 0.64, rim: 0.3, fog: 0x8f9a90, skyTop: 0x41667a, cloud: 0.3, exposure: 0.96 },
+    siang: { sun: 0xf4ead6, sunPower: 1.25, sunFrom: [120, 200, 95], skyLight: 0xcddacd, groundLight: 0x26342c, ambient: 0.7, rim: 0.32, fog: 0x4a6a6e, skyTop: 0x27485c, cloud: 0.38, exposure: 0.96 },
+    sore: { sun: 0xff9a55, sunPower: 1.35, sunFrom: [-190, 105, 65], skyLight: 0xf0b890, groundLight: 0x30283a, ambient: 0.62, rim: 0.36, fog: 0x8a6656, skyTop: 0x3a3f68, cloud: 0.34, exposure: 0.98 },
+    malam: { sun: 0xa0b6f5, sunPower: 0.58, sunFrom: [120, 180, -90], skyLight: 0x6478bc, groundLight: 0x12182a, ambient: 0.55, rim: 0.45, fog: 0x0c1426, skyTop: 0x040716, cloud: 0.06, exposure: 0.98 },
   },
 };
 
