@@ -20,6 +20,7 @@ describe("map selection", () => {
     [2, 384, 288],
     [3, 384, 288],
     [4, 384, 288],
+    [5, 384, 288],
   ])("map %i loads with its own size, an altar and room for 40 castles", async (id, w, h) => {
     const m = await loadMap(id);
     expect(m.GRID_W).toBe(w);
@@ -38,17 +39,38 @@ describe("map selection", () => {
     }
   });
 
-  it("only maps 3 and 4 have rivers and landmarks", async () => {
+  it("only maps 3, 4 and 5 have rivers and landmarks", async () => {
     for (const id of [1, 2]) {
       const map = new (await loadMap(id)).WorldMap();
       expect(map.rivers).toHaveLength(0);
       expect(map.landmarks).toHaveLength(0);
     }
-    for (const id of [3, 4]) {
+    for (const id of [3, 4, 5]) {
       const map = new (await loadMap(id)).WorldMap();
       expect(map.rivers.length).toBeGreaterThanOrEqual(6);
       expect(map.landmarks.length).toBeGreaterThanOrEqual(5);
     }
+  });
+});
+
+describe("map 5, the dragon's bay", () => {
+  it("has every landmark and river it asks for", async () => {
+    const map = new (await loadMap(5)).WorldMap();
+    expect(map.landmarks.map((l) => l.name).sort()).toEqual(map.def.landmarks.map((l) => l.name).sort());
+    expect(map.rivers).toHaveLength(map.def.rivers.length);
+  });
+
+  it("keeps all its realms on one walkable island", async () => {
+    const map = new (await loadMap(5)).WorldMap();
+    const field = map.fieldTo(map.altar.x, map.altar.z);
+    const reached: Record<string, number> = {};
+    map.biome.forEach((b, i) => {
+      if (field[i] < 65535) reached[b] = (reached[b] ?? 0) + 1;
+    });
+    expect(reached.snow).toBeGreaterThan(1800);
+    expect(reached.mesa).toBeGreaterThan(4000);
+    expect(reached.desert).toBeGreaterThan(2000);
+    expect(reached.forest).toBeGreaterThan(10000);
   });
 });
 
@@ -82,7 +104,7 @@ describe("map 4, the three realms", () => {
   });
 });
 
-describe.each([3, 4])("rivers of map %i", (id) => {
+describe.each([3, 4, 5])("rivers of map %i", (id) => {
   it.runIf(id === 3)("leave biomes and navigation exactly as on map 2", async () => {
     const m2 = await loadMap(2);
     const plain = new m2.WorldMap();

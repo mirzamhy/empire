@@ -1,15 +1,17 @@
 // The playable maps. One is active per page load or process:
-//   browser  ?map=1|2|3|4
-//   node     EMPIRE_MAP=1|2|3|4, or globalThis.EMPIRE_MAP set before the sim modules are imported
+//   browser  ?map=1|2|3|4|5
+//   node     EMPIRE_MAP=1|2|3|4|5, or globalThis.EMPIRE_MAP set before the sim modules are imported
 // The newest map is the default.
 //
 //   1  Benua Klasik   576 x 432 m, traced from the reference picture: bright, with a desert
 //   2  Hutan Gelap    864 x 648 m, dark wooded continent with five ranges and foothills (D-030)
 //   3  Hutan Sungai   map 2 plus rivers that troops wade through, landmarks and living air (D-031)
 //   4  Tiga Alam      traced from a second picture: snow in the north, green heartland, red desert
+//   5  Teluk Naga    traced from a third picture: spiral bays, a glacier, red mesas and a marsh
 import { MAP_H as H1, MAP_ROWS as ROWS1, MAP_W as W1 } from "./mapdata1";
 import { MAP_H as H2, MAP_ROWS as ROWS2, MAP_W as W2 } from "./mapdata";
 import { MAP_H as H4, MAP_ROWS as ROWS4, MAP_W as W4 } from "./mapdata4";
+import { MAP_H as H5, MAP_ROWS as ROWS5, MAP_W as W5 } from "./mapdata5";
 
 /** A point in normalised map coordinates: x -1 west .. 1 east, y -1 north .. 1 south. */
 export type NPoint = [number, number];
@@ -116,13 +118,46 @@ const LANDMARKS_4: LandmarkDef[] = [
   { kind: "lighthouse", name: "Mercusuar Teluk Timur", at: [0.76, 0.1], r: 5, on: "shore" },
 ];
 
+const RIVERS_5: RiverDef[] = [
+  // Sungai Danau: the central ranges feed the mountain lake, which drains west to the great gulf
+  { name: "Sungai Danau", from: [0.0, -0.36, "l"], to: [0.08, -0.17], width: [3, 5] },
+  { name: "Sungai Danau", from: [0.04, -0.16, "w"], to: [-0.42, -0.05], via: [[-0.12, -0.08]], width: [5, 8] },
+  // Sungai Naga: down from the southern range into the Dragon's Bay
+  { name: "Sungai Naga", from: [0.02, 0.1, "l"], to: [0.2, 0.42], via: [[0.12, 0.24]], width: [3.5, 7] },
+  // Sungai Utara: across the northern plains to the north bay
+  { name: "Sungai Utara", from: [-0.1, -0.3, "l"], to: [-0.24, -0.56], width: [3, 6] },
+  // Sungai Tanjung: through the south-western forest into the inner bay
+  { name: "Sungai Tanjung", from: [-0.17, 0.3, "l"], to: [-0.06, 0.5], width: [3, 5.5] },
+  // Sungai Rawa: out of the forest into the marsh, which spills to the south coast
+  { name: "Sungai Rawa", from: [0.55, 0.28, "l"], to: [0.6, 0.55], width: [3, 5] },
+  { name: "Sungai Rawa", from: [0.56, 0.6, "w"], to: [0.47, 0.72], width: [5, 7] },
+  // Wadi Merah: a thin stream down the sand corridor between the mesas to the southern inlet
+  { name: "Wadi Merah", from: [0.6, -0.3, "l"], to: [0.64, 0.22], via: [[0.48, -0.02], [0.5, 0.1]], width: [2.5, 4.5] },
+  // Kali Salju: meltwater from the glacier
+  { name: "Kali Salju", from: [0.1, -0.62, "l"], to: [0.12, -0.97], width: [2.5, 5] },
+];
+
+const LANDMARKS_5: LandmarkDef[] = [
+  { kind: "iceSpire", name: "Taring Es", at: [0.02, -0.66], r: 9, on: "foot" },
+  { kind: "watchtower", name: "Menara Gletser", at: [-0.14, -0.5], r: 5, on: "foot" },
+  { kind: "sandArch", name: "Gerbang Mesa", at: [0.52, -0.1], r: 12, on: "low" },
+  { kind: "dragonBones", name: "Kerangka Naga Teluk", at: [0.1, 0.2], r: 17, on: "low" },
+  { kind: "greatTree", name: "Pohon Rawa", at: [0.72, 0.56], r: 9, on: "low" },
+  { kind: "stoneCircle", name: "Lingkaran Batu", at: [-0.5, 0.26], r: 11, on: "low" },
+  { kind: "ruins", name: "Reruntuhan Dataran Barat", at: [-0.42, -0.34], r: 16, on: "low" },
+  { kind: "watchtower", name: "Menara Celah Selatan", at: [0.3, 0.24], r: 5, on: "foot" },
+  { kind: "lighthouse", name: "Mercusuar Pusaran Barat", at: [-0.72, -0.42], r: 5, on: "shore" },
+  { kind: "lighthouse", name: "Mercusuar Tanjung Naga", at: [-0.02, 0.7], r: 5, on: "shore" },
+];
+
 export const MAPS: Record<number, MapDef> = {
   1: { id: 1, name: "Benua Klasik", w: W1, h: H1, rows: ROWS1, terrain: "classic", theme: "bright", rivers: [], landmarks: [], life: false, clouds: false, detailedTrees: false },
   2: { id: 2, name: "Hutan Gelap", w: W2, h: H2, rows: ROWS2, terrain: "wild", theme: "dark", rivers: [], landmarks: [], life: false, clouds: false, detailedTrees: false },
   3: { id: 3, name: "Hutan Sungai", w: W2, h: H2, rows: ROWS2, terrain: "wild", theme: "dark", rivers: RIVERS, landmarks: LANDMARKS, life: true, clouds: false, detailedTrees: true },
   4: { id: 4, name: "Tiga Alam", w: W4, h: H4, rows: ROWS4, terrain: "alpine", theme: "vivid", rivers: RIVERS_4, landmarks: LANDMARKS_4, life: true, clouds: true, detailedTrees: true },
+  5: { id: 5, name: "Teluk Naga", w: W5, h: H5, rows: ROWS5, terrain: "alpine", theme: "vivid", rivers: RIVERS_5, landmarks: LANDMARKS_5, life: true, clouds: true, detailedTrees: true },
 };
-export const DEFAULT_MAP = 4;
+export const DEFAULT_MAP = 5;
 
 function pickMapId(): number {
   const g = globalThis as { EMPIRE_MAP?: unknown; location?: { search?: string }; process?: { env?: Record<string, string | undefined> } };
