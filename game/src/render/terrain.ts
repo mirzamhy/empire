@@ -28,11 +28,18 @@ export interface TerrainHandles {
   lightPool: THREE.DataTexture;
   /** 0 by day, 1 at full night: lights the pools and darkens the open sea */
   setNight(night: number): void;
+  /** rain darkens the ground (0..1), snow settles on everything but sand and beaches (0..1) */
+  setWeather(wet: number, snow: number): void;
+  /** the direction of the sun or moon, for its glitter on the sea */
+  setSun(dir: THREE.Vector3, color: THREE.Color, power: number): void;
   /** number of vegetation instances, for the perf overlay */
   plants: number;
 }
 
 export const TERRITORY_TILE = 4; // metres
+
+/** shared by the terrain and the sea */
+const GLINT = { dir: { value: new THREE.Vector3(0, 1, 0) }, color: { value: new THREE.Color(0xffffff) } };
 
 // ---------------------------------------------------------------- noise
 
@@ -101,6 +108,8 @@ export function buildTerrain(map: WorldMap, plantDensity = 1, simpleTrees = fals
   const time = { value: 0 };
   const cloudShadow = { value: 0.25 };
   const night = { value: 0 };
+  const wet = { value: 0 };
+  const snowCover = { value: 0 };
 
   // Height per grid corner = average of neighbouring cell centres.
   const cw = GRID_W + 1;
@@ -141,6 +150,8 @@ export function buildTerrain(map: WorldMap, plantDensity = 1, simpleTrees = fals
   const pos: number[] = [];
   const col: number[] = [];
   const uv: number[] = [];
+  const snowable: number[] = [];
+  let canSnow = 1;
   const c = new THREE.Color();
   const c2 = new THREE.Color();
   const c3 = new THREE.Color();
@@ -165,6 +176,7 @@ export function buildTerrain(map: WorldMap, plantDensity = 1, simpleTrees = fals
       }
     }
     const i = cellY * GRID_W + cellX;
+    canSnow = b === "desert" || b === "mesa" || b === "beach" || b === "water" ? 0 : 1;
     const macro = vnoise(wx / 40, wz / 40) * 0.65 + vnoise(wx / 9 + 40, wz / 9) * 0.35;
     const [ta, tb] = GROUND[b];
     c.setHex(ta).lerp(c2.setHex(tb), smooth(0.3, 0.7, macro));
@@ -223,6 +235,7 @@ export function buildTerrain(map: WorldMap, plantDensity = 1, simpleTrees = fals
           pos.push(p[0], p[1], p[2]);
           col.push(c.r, c.g, c.b);
           uv.push((p[0] - ox) / WORLD_W, (p[2] - oz) / WORLD_H);
+          snowable.push(canSnow);
         }
       }
     }
@@ -230,6 +243,7 @@ export function buildTerrain(map: WorldMap, plantDensity = 1, simpleTrees = fals
   geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
   geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  geo.setAttribute("aSnowable", new THREE.Float32BufferAttribute(snowable, 1));
   geo.computeVertexNormals();
 
   // Territory overlay: a small RGBA texture sampled with the terrain UV, alpha = ownership strength.
@@ -252,11 +266,13 @@ export function buildTerrain(map: WorldMap, plantDensity = 1, simpleTrees = fals
     shader.uniforms.uCloud = cloudShadow;
     shader.uniforms.uNight = night;
     shader.uniforms.uLightPool = { value: lightPool };
+    shader.uniforms.uWet = wet;
+    shader.uniforms.uSnowCover = snowCover;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nvarying vec2 vTerrUv;\nvarying vec2 vWorldXZ;")
-      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvTerrUv = uv;\nvWorldXZ = position.xz;");
+      .replace("#include <common>", "#include <common>\nattribute float aSnowable;\nvarying float vSnowable;\nvarying vec2 vTerrUv;\nvarying vec2 vWorldXZ;")
+      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvTerrUv = uv;\nvWorldXZ = position.xz;\nvSnowable = aSnowable;");
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", `#include <common>\nuniform sampler2D territory;\nuniform sampler2D uLightPool;\nuniform float uNight;\nuniform float uTime;\nuniform float uCloud;\nvarying vec2 vTerrUv;\nvarying vec2 vWorldXZ;${GLSL_NOISE}`)
+      .replace("#include <common>", `#include <common>\nuniform sampler2D territory;\nuniform sampler2D uLightPool;\nuniform float uNight;\nuniform float uWet;\nuniform float uSnowCover;\nvarying float vSnowable;\nuniform float uTime;\nuniform float uCloud;\nvarying vec2 vTerrUv;\nvarying vec2 vWorldXZ;${GLSL_NOISE}`)
       .replace(
         "#include <color_fragment>",
         `#include <color_fragment>
@@ -265,7 +281,12 @@ diffuseColor.rgb = mix(diffuseColor.rgb, terr.rgb, terr.a * 0.7);
 // soft cloud shadows drifting with the wind
 vec2 cp = vWorldXZ / 70.0 + vec2(uTime * 0.012, uTime * 0.007);
 float cloud = smoothstep(0.5, 0.78, vnoise(cp) * 0.7 + vnoise(cp * 2.3 + 7.0) * 0.3);
-diffuseColor.rgb *= 1.0 - cloud * uCloud;`,
+diffuseColor.rgb *= 1.0 - cloud * uCloud;
+// rain: wet ground is darker and a little less saturated
+diffuseColor.rgb = mix(diffuseColor.rgb, vec3(dot(diffuseColor.rgb, vec3(0.33))), uWet * 0.14) * (1.0 - uWet * 0.2);
+// snow settles in patches that close up as it keeps falling
+float drift = vnoise(vWorldXZ / 6.0) * 0.65 + vnoise(vWorldXZ / 1.7 + 11.0) * 0.35;
+diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.96, 0.98), vSnowable * smoothstep(1.02 - uSnowCover, 1.2 - uSnowCover, drift + 0.12));`,
       )
       .replace(
         "#include <opaque_fragment>",
@@ -319,6 +340,14 @@ outgoingLight += vec3(1.0, 0.5, 0.2) * (diffuseColor.rgb * 0.45 + 0.06) * textur
   return {
     group, water, altarCrystal: crystal, territoryTex, territoryW, territoryH, clearTrees, cloudShadow, lightPool, plants: veg.count,
     update: (t) => (time.value = t),
+    setWeather: (w, s) => {
+      wet.value = w;
+      snowCover.value = s;
+    },
+    setSun: (dir, color, power) => {
+      GLINT.dir.value.copy(dir).normalize();
+      GLINT.color.value.copy(color).multiplyScalar(power);
+    },
     setNight: (n) => {
       night.value = n;
       deepMat.color.copy(deepDay).multiplyScalar(1 - 0.65 * n);
@@ -351,6 +380,8 @@ function buildWater(distLand: Float32Array, time: { value: number }) {
     shader.uniforms.uShallow = { value: new THREE.Color(THEME.water.shallow) };
     shader.uniforms.uMid = { value: new THREE.Color(THEME.water.mid) };
     shader.uniforms.uDeep = { value: new THREE.Color(THEME.water.deep) };
+    shader.uniforms.uGlintDir = GLINT.dir;
+    shader.uniforms.uGlintColor = GLINT.color;
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nuniform float uTime;\nvarying vec2 vWorldXZ;")
       .replace(
@@ -360,7 +391,7 @@ transformed.y += sin(position.x * 0.11 + uTime * 1.1) * 0.09 + sin(position.z * 
 vWorldXZ = position.xz;`,
       );
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", `#include <common>\nuniform float uTime;\nuniform sampler2D uDist;\nuniform vec2 uSize;\nuniform vec3 uShallow;\nuniform vec3 uMid;\nuniform vec3 uDeep;\nvarying vec2 vWorldXZ;${GLSL_NOISE}`)
+      .replace("#include <common>", `#include <common>\nuniform float uTime;\nuniform sampler2D uDist;\nuniform vec2 uSize;\nuniform vec3 uShallow;\nuniform vec3 uMid;\nuniform vec3 uDeep;\nuniform vec3 uGlintDir;\nuniform vec3 uGlintColor;\nvarying vec2 vWorldXZ;${GLSL_NOISE}`)
       .replace(
         "#include <color_fragment>",
         `#include <color_fragment>
@@ -375,6 +406,15 @@ float edge = 0.07 + 0.025 * sin(uTime * 1.3 + n * 6.2831);
 float foam = (1.0 - smoothstep(edge - 0.03, edge, d)) * step(0.35, n + 0.25 * sin(uTime * 0.9));
 diffuseColor.rgb = mix(sea, vec3(0.96, 0.98, 1.0), foam * 0.65);
 diffuseColor.a = mix(mix(0.6, 0.93, smoothstep(0.0, 0.45, d)), 0.85, foam);`,
+      )
+      .replace(
+        "#include <opaque_fragment>",
+        `// the sun or moon glitters on the waves
+vec3 toEye = normalize(cameraPosition - vec3(vWorldXZ.x, 0.0, vWorldXZ.y));
+float glintSpot = pow(max(normalize(uGlintDir + toEye).y, 0.0), 420.0);
+float sparkle = vnoise(vWorldXZ * 0.7 + uTime * 0.5) * vnoise(vWorldXZ * 1.5 - uTime * 0.35);
+outgoingLight += uGlintColor * glintSpot * (0.12 + sparkle * 1.6) * (1.0 - foam);
+#include <opaque_fragment>`,
       );
   };
   const water = new THREE.Mesh(geo, mat);
