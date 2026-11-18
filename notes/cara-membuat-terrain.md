@@ -266,6 +266,22 @@ Suasana per fase ronde (`atmosphere.ts`) mengatur arah dan kekuatan matahari, ca
 kabut, warna langit, bayangan awan, dan eksposur. Di peta gelap: fajar berkabut di lobi, siang
 mendung saat perang, sore merah di fase final, senja ungu di hasil.
 
+
+### Siklus pagi, siang, sore, malam
+
+`render/daycycle.ts` membaca jam dari timer ronde, jadi ikut berhenti saat game dijeda dan setiap
+ronde mulai dari pagi. Lobi ditambah perang (840 detik dengan konfigurasi sekarang) berisi 1,5 hari:
+pagi, siang, sore, malam, pagi, siang, lalu sore tepat saat fase final mulai. Fase final dan hasil
+tetap memakai mood sendiri. Palet tiap waktu ada di `THEME.day`.
+
+- **Pergantian matahari dan bulan:** cahaya memudar dulu, pindah saat tidak terlihat, lalu muncul
+  lagi, supaya bayangan tidak menyapu peta.
+- **Malam:** cahaya bulan biru, bintang dan bulan di langit, laut dalam digelapkan, kabut lembah
+  lebih tebal, burung hilang, kunang-kunang keluar, dan cahaya lampu hangat di tanah sekitar kastil,
+  desa, landmark, dan altar (`lightPool`, satu byte per petak wilayah, dicat ulang tiap 0,5 detik).
+- **Opsi URL:** `?time=pagi|siang|sore|malam` mengunci satu waktu, `?time=off` kembali ke mood per
+  fase yang lama.
+
 ## 11. Atmosfer hidup (peta 3)
 
 `render/life.ts`, murni hiasan dan tidak dibaca simulasi. `?atmo=0` mematikannya.
