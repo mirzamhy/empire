@@ -12,7 +12,8 @@ import { loadConfig, UNIT_TYPES } from "./sim/config";
 import { WORLD_SCALE, WorldMap } from "./sim/map";
 import { Sim } from "./sim/world";
 import { Atmosphere } from "./render/atmosphere";
-import { buildTerrain } from "./render/terrain";
+import { paintLightPool, parseTimeMode, type PoolLight } from "./render/daycycle";
+import { buildTerrain, TERRITORY_TILE } from "./render/terrain";
 import { createScene } from "./render/scene";
 import { CastleRenderer } from "./render/castles";
 import { VillageRenderer } from "./render/villages";
@@ -79,7 +80,7 @@ function updateLife(t: number, dt: number) {
   if (!life) return;
   lifeFocus.copy(controls ? controls.target : director.focus);
   if (view.scene.fog) hazeColor.copy(view.scene.fog.color);
-  life.update(sim.phase, t, dt, view.camera, lifeFocus, hazeColor, view.renderer.domElement.height);
+  life.update(sim.phase, t, dt, view.camera, lifeFocus, hazeColor, view.renderer.domElement.height, atmosphere.night);
 }
 
 if (studio || params.has("free")) {
@@ -205,9 +206,21 @@ function dispatch(now: number) {
 }
 
 // The world is too big for one sharp shadow map: the shadow box follows the camera focus.
-// The sun's direction and colour come from the atmosphere (mood per round phase).
-const atmosphere = new Atmosphere(view, terrain.cloudShadow);
+// The sun's direction and colour come from the atmosphere (day cycle, then mood per round phase).
+const atmosphere = new Atmosphere(view, terrain.cloudShadow, parseTimeMode(params.get("time")));
 if (studio) atmosphere.setVisible(false);
+/** Warm light on the ground around castles, villages, landmarks and the altar, once it gets dark. */
+function paintNightLights() {
+  terrain.setNight(atmosphere.night);
+  if (atmosphere.night < 0.01) return;
+  const lights: PoolLight[] = [{ x: map.altar.x, z: map.altar.z, r: 12, power: 0.5 }];
+  for (const k of sim.kingdoms) if (k.alive) lights.push({ x: k.x, z: k.z, r: 26, power: 1 });
+  for (const v of sim.villages) lights.push({ x: v.x, z: v.z, r: 15, power: 0.75 });
+  for (const l of map.landmarks) lights.push({ x: l.x, z: l.z, r: 16, power: 0.6 });
+  const tex = terrain.lightPool;
+  paintLightPool(tex.image.data as Uint8Array, terrain.territoryW, terrain.territoryH, TERRITORY_TILE, lights);
+  tex.needsUpdate = true;
+}
 function followSun() {
   const f = controls ? controls.target : director.focus;
   const o = atmosphere.sunOffset;
@@ -231,11 +244,12 @@ function frame() {
   if (paintTimer > 0.5) {
     paintTimer = 0;
     paintTerritory();
+    paintNightLights();
   }
   terrain.altarCrystal.rotation.y = t * 1.6;
   terrain.water.position.y = -0.25 + Math.sin(t * 1.4) * 0.05;
   terrain.update(t);
-  if (!studio) atmosphere.update(sim.phase, dt);
+  if (!studio) atmosphere.update(sim.phase, sim.phaseT, sim.cfg.round, dt);
   castles.update(sim, t);
   villages.update(sim, t);
   perf?.begin("units");
@@ -271,7 +285,7 @@ setInterval(() => {
 
 Object.assign(window, {
   __em: {
-    sim, map, view, units, villages, fx, hud, director, router, controls, perf, life, liveState: () => liveState,
+    sim, map, view, atmosphere, units, villages, fx, hud, director, router, controls, perf, life, liveState: () => liveState,
     render: () => view.renderer.render(view.scene, view.camera),
     /** Advance the sim and draw once. The browser pane throttles rAF, so tests drive frames by hand. */
     run: (seconds: number) => {
@@ -286,7 +300,8 @@ Object.assign(window, {
       fx.update(sim, now);
       for (let i = 0; i < 60; i++) director.update(sim, now, 0.05);
       terrain.update(now);
-      if (!studio) atmosphere.update(sim.phase, seconds);
+      if (!studio) atmosphere.update(sim.phase, sim.phaseT, sim.cfg.round, seconds);
+      paintNightLights();
       followSun();
       updateLife(now, Math.min(seconds, 2));
       hud?.update(now);
