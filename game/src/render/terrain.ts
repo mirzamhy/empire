@@ -24,6 +24,10 @@ export interface TerrainHandles {
   update(time: number): void;
   /** 0..1 strength of the drifting cloud shadows (set by the atmosphere) */
   cloudShadow: { value: number };
+  /** one byte per territory tile: warm light on the ground around buildings at night */
+  lightPool: THREE.DataTexture;
+  /** 0 by day, 1 at full night: lights the pools and darkens the open sea */
+  setNight(night: number): void;
   /** number of vegetation instances, for the perf overlay */
   plants: number;
 }
@@ -93,6 +97,7 @@ export function buildTerrain(map: WorldMap, plantDensity = 1, simpleTrees = fals
   const rng = new Rng(42);
   const time = { value: 0 };
   const cloudShadow = { value: 0.25 };
+  const night = { value: 0 };
 
   // Height per grid corner = average of neighbouring cell centres.
   const cw = GRID_W + 1;
@@ -227,17 +232,23 @@ export function buildTerrain(map: WorldMap, plantDensity = 1, simpleTrees = fals
   territoryTex.magFilter = THREE.LinearFilter;
   territoryTex.flipY = false;
   territoryTex.needsUpdate = true;
+  const lightPool = new THREE.DataTexture(new Uint8Array(territoryW * territoryH), territoryW, territoryH, THREE.RedFormat);
+  lightPool.magFilter = lightPool.minFilter = THREE.LinearFilter;
+  lightPool.flipY = false;
+  lightPool.needsUpdate = true;
 
   const terrainMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   terrainMat.onBeforeCompile = (shader) => {
     shader.uniforms.territory = { value: territoryTex };
     shader.uniforms.uTime = time;
     shader.uniforms.uCloud = cloudShadow;
+    shader.uniforms.uNight = night;
+    shader.uniforms.uLightPool = { value: lightPool };
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nvarying vec2 vTerrUv;\nvarying vec2 vWorldXZ;")
       .replace("#include <uv_vertex>", "#include <uv_vertex>\nvTerrUv = uv;\nvWorldXZ = position.xz;");
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", `#include <common>\nuniform sampler2D territory;\nuniform float uTime;\nuniform float uCloud;\nvarying vec2 vTerrUv;\nvarying vec2 vWorldXZ;${GLSL_NOISE}`)
+      .replace("#include <common>", `#include <common>\nuniform sampler2D territory;\nuniform sampler2D uLightPool;\nuniform float uNight;\nuniform float uTime;\nuniform float uCloud;\nvarying vec2 vTerrUv;\nvarying vec2 vWorldXZ;${GLSL_NOISE}`)
       .replace(
         "#include <color_fragment>",
         `#include <color_fragment>
@@ -247,6 +258,12 @@ diffuseColor.rgb = mix(diffuseColor.rgb, terr.rgb, terr.a * 0.7);
 vec2 cp = vWorldXZ / 70.0 + vec2(uTime * 0.012, uTime * 0.007);
 float cloud = smoothstep(0.5, 0.78, vnoise(cp) * 0.7 + vnoise(cp * 2.3 + 7.0) * 0.3);
 diffuseColor.rgb *= 1.0 - cloud * uCloud;`,
+      )
+      .replace(
+        "#include <opaque_fragment>",
+        `// lamplight from windows and fires on the ground around buildings
+outgoingLight += vec3(1.0, 0.5, 0.2) * (diffuseColor.rgb * 0.45 + 0.06) * texture2D(uLightPool, vTerrUv).r * uNight;
+#include <opaque_fragment>`,
       );
   };
   const terrain = new THREE.Mesh(geo, terrainMat);
@@ -259,7 +276,10 @@ diffuseColor.rgb *= 1.0 - cloud * uCloud;`,
   for (let i = 0; i < distShore.length; i++) if (map.riverBank[i] < 5) distShore[i] = Math.max(distShore[i], 3 * (1 - smooth(1, 5, map.riverBank[i])));
   const water = buildWater(distShore, time);
   group.add(water);
-  const deep = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_W * 6, WORLD_H * 6).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: THEME.deepSea }));
+  // unlit, so the night has to darken it by hand
+  const deepMat = new THREE.MeshBasicMaterial({ color: THEME.deepSea });
+  const deepDay = deepMat.color.clone();
+  const deep = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_W * 6, WORLD_H * 6).rotateX(-Math.PI / 2), deepMat);
   deep.position.y = -7;
   group.add(deep);
 
@@ -289,8 +309,12 @@ diffuseColor.rgb *= 1.0 - cloud * uCloud;`,
   };
 
   return {
-    group, water, altarCrystal: crystal, territoryTex, territoryW, territoryH, clearTrees, cloudShadow, plants: veg.count,
+    group, water, altarCrystal: crystal, territoryTex, territoryW, territoryH, clearTrees, cloudShadow, lightPool, plants: veg.count,
     update: (t) => (time.value = t),
+    setNight: (n) => {
+      night.value = n;
+      deepMat.color.copy(deepDay).multiplyScalar(1 - 0.65 * n);
+    },
   };
 }
 
