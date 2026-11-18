@@ -82,9 +82,12 @@ const ROCK = new THREE.Color(THEME.rock);
 const ROCK_DARK = new THREE.Color(THEME.rockDark);
 const SNOW = new THREE.Color(0xeef2f5);
 const WET_SAND = new THREE.Color(THEME.wetSand);
+const MESA_DARK = new THREE.Color(0x7c3626);
 const SNOW_LINE = THEME.snowLine;
 /** trees thin out above this height and stop a little below the snow */
 const TREE_LINE = THEME.treeLine;
+/** In the vivid theme the snow comes down the ranges toward the frozen north. */
+const northDrop = (wz: number) => (THEME.id === "vivid" ? 20 * smooth(-0.25, -0.62, wz / (WORLD_H / 2)) : 0);
 /** damp earth along a river */
 const RIVER_MUD = new THREE.Color(0x3a3a2a);
 
@@ -178,13 +181,18 @@ export function buildTerrain(map: WorldMap, plantDensity = 1, simpleTrees = fals
       // wet sand along the shore
       if (distWater[i] <= 1.5 && h < 0.6) c.lerp(WET_SAND, 0.6 * (1 - smooth(0.2, 0.6, h)));
       // cliffs: steep faces turn to rock
-      if (b !== "beach") {
+      if (b === "mesa") {
+        // red rock keeps its colour on the cliffs, in bands that follow the height
+        c.multiplyScalar(0.9 + 0.12 * Math.sin(h * 2.4 + vnoise(wx * 0.05, wz * 0.05) * 3));
+        c.lerp(MESA_DARK, smooth(0.82, 0.5, ny) * 0.65);
+      } else if (b !== "beach") {
         c.lerp(ROCK, smooth(0.86, 0.68, ny) * 0.9);
         c.lerp(ROCK_DARK, smooth(0.66, 0.45, ny) * 0.8);
       }
       // snow on the peaks, with a ragged line
-      const snow = smooth(SNOW_LINE, SNOW_LINE + 4, h + (vnoise(wx * 0.22, wz * 0.22) - 0.5) * 6);
-      if (snow > 0) c.lerp(SNOW, snow * smooth(0.35, 0.6, ny));
+      const line = SNOW_LINE - northDrop(wz);
+      const snow = smooth(line, line + 4, h + (vnoise(wx * 0.22, wz * 0.22) - 0.5) * 6);
+      if (snow > 0 && b !== "mesa" && b !== "desert") c.lerp(SNOW, snow * smooth(0.35, 0.6, ny));
       // valleys are darker (a river valley is cut on purpose, so it is spared most of this)
       const bank = map.riverBank[i];
       c.multiplyScalar(1 - Math.min(0.22, valley[i] * 0.05) * (bank < 20 ? 0.3 : 1));
@@ -638,6 +646,8 @@ function windMaterial(time: { value: number }, grounded = false) {
 function buildVegetation(map: WorldMap, time: { value: number }, plantDensity: number, distWater: Float32Array, detailed: boolean) {
   const rng = new Rng(4242);
   const bright = THEME.id === "bright";
+  // sand with cactus and palms, as opposed to the moor and grey shingle of the dark maps
+  const warm = THEME.id !== "dark";
   const kinds: PlantKind[] = ["oakRound", "oakTall", "oakWide", "pine", "pineTall", "pineSnow", "birch", "bush", "dead", "cactus", "palm", "rock", "boulder", "grass", "flower", "reed", "fern", "stump", "log"];
   const spots = new Map<PlantKind, { m: THREE.Matrix4; c: THREE.Color }[]>(kinds.map((k) => [k, []]));
   const q = new THREE.Quaternion();
@@ -678,7 +688,7 @@ function buildVegetation(map: WorldMap, time: { value: number }, plantDensity: n
       if (r < 0.015) kind = rng.next() < 0.6 ? "oakWide" : "oakRound";
       else if (r < 0.04) kind = rng.next() < 0.7 ? "bush" : "rock";
       else if (r < 0.04 + 0.16 * meadow) kind = rng.next() < 0.65 ? "grass" : "flower";
-    } else if (b === "desert" && bright) {
+    } else if (b === "desert" && warm) {
       // desert: palms by the water, cactus, dead wood and boulders
       if (distWater[i] < 4 && r < 0.07) kind = "palm";
       else if (r < 0.03) kind = "cactus";
@@ -697,15 +707,22 @@ function buildVegetation(map: WorldMap, time: { value: number }, plantDensity: n
       else if (r < 0.13) kind = rng.next() < 0.6 ? "rock" : "boulder";
       else if (r < 0.14) kind = "dead";
     } else if (b === "mountain") {
-      if (h > SNOW_LINE) kind = r < 0.012 ? "rock" : null; // bare peaks
-      else if (h > TREE_LINE + 6) kind = r < 0.04 ? "pineSnow" : r < 0.07 ? "boulder" : null;
-      else if (h > TREE_LINE) kind = r < 0.1 ? (rng.next() < 0.5 ? "pine" : "pineSnow") : r < 0.14 ? "rock" : null;
+      const drop = northDrop(p.z);
+      if (h > SNOW_LINE - drop) kind = r < 0.012 ? "rock" : null; // bare peaks
+      else if (h > TREE_LINE - drop + 6) kind = r < 0.04 ? "pineSnow" : r < 0.07 ? "boulder" : null;
+      else if (h > TREE_LINE - drop) kind = r < 0.1 ? (rng.next() < 0.5 ? "pine" : "pineSnow") : r < 0.14 ? "rock" : null;
       // below the tree line the slopes are wooded like the foothills
       else if (r < 0.1 + 0.32 * grove) kind = rng.next() < 0.5 ? "pine" : "pineTall";
       else if (r < 0.13 + 0.32 * grove) kind = rng.next() < 0.6 ? "rock" : "boulder";
+    } else if (b === "snow") {
+      // dark firs standing in the snow, thick in groves and absent in the open fields
+      if (r < 0.02 + 0.2 * grove) kind = "pineSnow";
+      else if (r < 0.03 + 0.2 * grove) kind = rng.next() < 0.7 ? "rock" : "dead";
+    } else if (b === "mesa") {
+      if (r < 0.025) kind = rng.next() < 0.7 ? "rock" : "dead";
     } else if (b === "beach") {
-      if (r < 0.03) kind = bright ? "palm" : "rock";
-      else if (r < (bright ? 0.05 : 0.04)) kind = bright ? "rock" : "dead"; // driftwood
+      if (r < 0.03) kind = warm ? "palm" : "rock";
+      else if (r < (warm ? 0.05 : 0.04)) kind = warm ? "rock" : "dead"; // driftwood
     }
     if (!kind) continue;
     if (Math.hypot(x - map.altar.x, z - map.altar.z) < 12) continue;
