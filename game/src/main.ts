@@ -13,6 +13,8 @@ import { WORLD_SCALE, WorldMap } from "./sim/map";
 import { Sim } from "./sim/world";
 import { Atmosphere } from "./render/atmosphere";
 import { paintLightPool, parseTimeMode, type PoolLight } from "./render/daycycle";
+import { WeatherRenderer } from "./render/weather";
+import { LABELS } from "./render/weathercycle";
 import { buildTerrain, TERRITORY_TILE } from "./render/terrain";
 import { createScene } from "./render/scene";
 import { CastleRenderer } from "./render/castles";
@@ -209,6 +211,24 @@ function dispatch(now: number) {
 // The sun's direction and colour come from the atmosphere (day cycle, then mood per round phase).
 const atmosphere = new Atmosphere(view, terrain.cloudShadow, parseTimeMode(params.get("time")));
 if (studio) atmosphere.setVisible(false);
+// weather works on every map; ?weather= holds one kind or switches it off
+const weather = studio ? null : new WeatherRenderer(map, view, terrain, params.get("weather"));
+if (weather) {
+  view.scene.add(weather.group);
+  weather.onChange = (kind) => {
+    if (kind !== "cerah") hud?.toast(LABELS[kind].title, LABELS[kind].note, "#dfe9f5");
+  };
+}
+const skyFocus = new THREE.Vector3();
+/** Weather first, then the light it changes, then what the ground and the sea need from both. */
+function updateSky(t: number, dt: number) {
+  if (studio) return;
+  skyFocus.copy(controls ? controls.target : director.focus);
+  skyFocus.y = 0;
+  weather?.update(sim.phase, sim.phaseT, sim.cfg.round, sim.roundId, t, dt, skyFocus, atmosphere.night);
+  atmosphere.update(sim.phase, sim.phaseT, sim.cfg.round, dt, weather?.fx);
+  terrain.setSun(atmosphere.sunOffset, view.sun.color, view.sun.intensity);
+}
 /** Warm light on the ground around castles, villages, landmarks and the altar, once it gets dark. */
 function paintNightLights() {
   terrain.setNight(atmosphere.night);
@@ -249,7 +269,7 @@ function frame() {
   terrain.altarCrystal.rotation.y = t * 1.6;
   terrain.water.position.y = -0.25 + Math.sin(t * 1.4) * 0.05;
   terrain.update(t);
-  if (!studio) atmosphere.update(sim.phase, sim.phaseT, sim.cfg.round, dt);
+  updateSky(t, dt);
   castles.update(sim, t);
   villages.update(sim, t);
   perf?.begin("units");
@@ -285,7 +305,7 @@ setInterval(() => {
 
 Object.assign(window, {
   __em: {
-    sim, map, view, atmosphere, units, villages, fx, hud, director, router, controls, perf, life, liveState: () => liveState,
+    sim, map, view, atmosphere, weather, units, villages, fx, hud, director, router, controls, perf, life, liveState: () => liveState,
     render: () => view.renderer.render(view.scene, view.camera),
     /** Advance the sim and draw once. The browser pane throttles rAF, so tests drive frames by hand. */
     run: (seconds: number) => {
@@ -300,7 +320,7 @@ Object.assign(window, {
       fx.update(sim, now);
       for (let i = 0; i < 60; i++) director.update(sim, now, 0.05);
       terrain.update(now);
-      if (!studio) atmosphere.update(sim.phase, sim.phaseT, sim.cfg.round, seconds);
+      updateSky(now, seconds);
       paintNightLights();
       followSun();
       updateLife(now, Math.min(seconds, 2));
