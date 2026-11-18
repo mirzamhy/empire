@@ -286,6 +286,28 @@ tetap memakai mood sendiri. Palet tiap waktu ada di `THEME.day`.
   desa, landmark, dan altar (`lightPool`, satu byte per petak wilayah, dicat ulang tiap 0,5 detik).
 - **Opsi URL:** `?time=pagi|siang|sore|malam` mengunci satu waktu, `?time=off` kembali ke mood per
   fase yang lama.
+- **Matahari:** bergerak terus dari timur ke barat (`sunArc`), jadi bayangan ikut berputar, dan
+  pantulannya berkilau di laut. Malam digantikan bulan.
+
+### Cuaca
+
+Cuaca berlaku di semua peta tanpa pengaturan per peta. `render/weathercycle.ts` berisi aturan dan
+jadwalnya, `render/weather.ts` tampilannya. Peluang tiap cuaca dihitung dari isi peta: badai pasir
+hanya muncul kalau ada gurun, dan salju lebih sering kalau ada padang salju.
+
+| Cuaca | Efek |
+|---|---|
+| cerah | langit bersih |
+| berawan | awan menutup, matahari redup |
+| hujan | garis hujan, tanah basah dan gelap |
+| badai | hujan deras, langit gelap, petir |
+| salju | butir salju, tanah memutih kecuali gurun dan pantai |
+| kabut | jarak pandang pendek |
+| pasir | butir pasir tertiup angin, udara kekuningan |
+
+Jadwal dihitung dari nomor ronde dan timer, jadi sama untuk ronde yang sama dan ikut berhenti saat
+dijeda. Lobi dan layar hasil selalu cerah. Cuaca hanya tampilan dan tidak memengaruhi pertarungan.
+`?weather=hujan` mengunci satu cuaca, `?weather=off` mematikannya.
 
 ## 11. Atmosfer hidup (peta 3)
 
