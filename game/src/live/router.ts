@@ -184,6 +184,8 @@ export class LiveRouter {
   }
 
   private like(key: string, name: string, count: number): RouteResult {
+    // while the Titan stands, every like is also a stone thrown at it, joined or not
+    this.sim.bossLike(key, name, count);
     const v = this.viewer(key);
     const lc = this.cfg.likes;
     const minute = Math.floor(this.sim.t / 60);

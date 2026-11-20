@@ -118,7 +118,12 @@ const VILLAGE_NAMES = [
   "Telagamas", "Padangrumput", "Sukaraja", "Mandalasari",
 ];
 
+/** The world boss: the World Dragon of every round, or a milestone boss (Naga Purba, the Titan). */
+export type BossKind = "dragon" | "elder" | "titan";
+export const BOSS_NAME: Record<BossKind, string> = { dragon: "Naga Dunia", elder: "Naga Purba", titan: "Titan Neraka" };
+
 export interface Dragon {
+  kind: BossKind;
   hp: number;
   maxHp: number;
   x: number;
@@ -127,7 +132,36 @@ export interface Dragon {
   summonedBy: number | null;
   damage: Map<number, number>;
   attackAt: number;
+  /** body radius: melee troops strike from this far */
+  radius: number;
+  /** where it is heading (Naga Purba and the Titan move), and the kingdom it hunts */
+  tx: number;
+  tz: number;
+  prey: number;
+  retargetAt: number;
+  /** seconds to its special attack (inferno, quake) */
+  special: number;
+  /** the Titan leaves at this time if it still stands */
+  until: number;
+  /** a blow being wound up: it lands at `at` on (x, z) */
+  windup: { act: "slam" | "quake"; at: number; x: number; z: number } | null;
+  /** likes per viewer waiting to become a shot (Titan) */
+  likes: Map<string, number>;
+  lastHit: number;
 }
+
+/** A meteor, a mother meteor or a burst of hellfire on its way; kid 0 = nobody's (world events). */
+interface Strike {
+  kid: number;
+  x: number;
+  z: number;
+  at: number;
+  r?: number;
+  dmg?: number;
+  castle?: number;
+}
+
+export type StrikeStyle = "meteor" | "mother" | "inferno";
 
 export type SimEvent =
   | { k: "join"; kid: number }
@@ -139,14 +173,20 @@ export type SimEvent =
   | { k: "hit"; fromX: number; fromZ: number; x: number; z: number; type: UnitType; dmg: number; on: HitTarget }
   /** id and heading let the renderer leave a corpse; they do not affect the sim */
   | { k: "death"; x: number; z: number; kid: number; type: UnitType; id: number; heading: number }
-  | { k: "dragon"; state: "spawn" | "dead"; by: number | null }
+  | { k: "dragon"; state: "spawn" | "dead" | "leave"; by: number | null; kind: BossKind; x: number; z: number }
+  /** a boss move: a blow wound up or landing, a quake, the Titan's last rampage, a roar */
+  | { k: "boss"; kind: BossKind; act: "windup" | "slam" | "quakeWindup" | "quake" | "rampage" | "roar" | "inferno"; x: number; z: number; r: number }
+  /** a viewer's like hits the boss (the Titan): from (fromX, fromZ), credited to kid (0 = no kingdom) */
+  | { k: "likeShot"; fromX: number; fromZ: number; x: number; z: number; dmg: number; kid: number; name: string }
+  /** Hujan Meteor Dunia: warning, then `seconds` of meteors and the mother meteor on (x, z) */
+  | { k: "doom"; warn: number; seconds: number; x: number; z: number; target: number | null }
   /** a village changed hands (prev 0 = it was neutral) */
   | { k: "village"; id: number; kid: number; prev: number }
   | { k: "tower"; id: number; kid: number }
   /** a spell was cast: (x, z) is its centre, r its reach, seconds how long it lasts (0 = instant) */
   | { k: "spell"; spell: SpellId; kid: number; x: number; z: number; r: number; seconds: number; from: string }
   /** a meteor is on its way and lands after `delay` seconds */
-  | { k: "strike"; x: number; z: number; r: number; delay: number }
+  | { k: "strike"; x: number; z: number; r: number; delay: number; style?: StrikeStyle }
   | { k: "impact"; x: number; z: number; r: number; dmg: number }
   /** lightning: first point is struck from the sky, the rest are jumps between units */
   | { k: "chain"; kid: number; points: { x: number; z: number; dmg: number }[] }
@@ -207,7 +247,9 @@ export class Sim {
   private altarField: Uint16Array;
   private colorCursor = 0;
   zones: Zone[] = [];
-  private strikes: { kid: number; x: number; z: number; at: number }[] = [];
+  private strikes: Strike[] = [];
+  /** Hujan Meteor Dunia runs until this time */
+  doomUntil = -1;
   private spellQueue: { key: string; spell: SpellId; from: string }[] = [];
   private spellTimer = 0;
 
@@ -453,13 +495,100 @@ export class Sim {
   }
 
   summonDragon(byKey: string | null) {
+    return this.summonBoss("dragon", byKey);
+  }
+
+  /**
+   * Bring a world boss to the altar. Only one boss at a time: a second one is refused (the World
+   * Dragon of the round simply comes later).
+   */
+  summonBoss(kind: BossKind, byKey: string | null = null) {
     if (this.dragon || this.phase === "LOBBY" || this.phase === "RESULT") return false;
     const dc = this.cfg.dragon;
     const by = byKey ? this.kingdomByKey(byKey) : null;
-    const hp = dc.hpBase + dc.hpPerKingdom * this.alive.length;
-    this.dragon = { hp, maxHp: hp, x: this.map.altar.x, z: this.map.altar.z, cd: 2, summonedBy: by?.id ?? null, damage: new Map(), attackAt: -9 };
-    this.dragonSpawnedThisRound = true;
-    this.emit({ k: "dragon", state: "spawn", by: by?.id ?? null });
+    const mult = kind === "elder" ? this.cfg.elder.hpMultiplier : kind === "titan" ? this.cfg.titan.hpMultiplier : 1;
+    const hp = Math.round((dc.hpBase + dc.hpPerKingdom * this.alive.length) * mult);
+    const { x, z } = this.map.altar;
+    this.dragon = {
+      kind, hp, maxHp: hp, x, z, cd: kind === "dragon" ? 2 : 4, summonedBy: by?.id ?? null, damage: new Map(), attackAt: -9,
+      radius: kind === "titan" ? this.cfg.titan.radius : 3, tx: x, tz: z, prey: 0, retargetAt: this.t + 3,
+      special: kind === "elder" ? this.cfg.elder.infernoEvery : this.cfg.titan.quakeEvery,
+      until: kind === "titan" ? this.t + this.cfg.titan.seconds : Infinity, windup: null, likes: new Map(), lastHit: 0,
+    };
+    if (kind === "dragon") this.dragonSpawnedThisRound = true;
+    this.emit({ k: "dragon", state: "spawn", by: by?.id ?? null, kind, x, z });
+    if (kind !== "dragon") this.emit({ k: "boss", kind, act: "roar", x, z, r: 0 });
+    return true;
+  }
+
+  /** Likes become shots at the Titan: every `likesPerShot` likes of one viewer is one stone. */
+  bossLike(key: string, name: string, count: number) {
+    const d = this.dragon;
+    if (!d || d.kind !== "titan" || (this.phase !== "WAR" && this.phase !== "FINAL")) return 0;
+    const tc = this.cfg.titan;
+    const acc = (d.likes.get(key) ?? 0) + count;
+    const shots = Math.min(tc.maxShotsPerEvent, Math.floor(acc / tc.likesPerShot));
+    d.likes.set(key, acc - shots * tc.likesPerShot);
+    const k = this.kingdomByKey(key);
+    for (let i = 0; i < shots && this.dragon; i++) {
+      // from the viewer's castle, or from the crowd on the hills around the Titan
+      const a = this.rng.next() * Math.PI * 2;
+      const fromX = k ? k.x : d.x + Math.cos(a) * 26;
+      const fromZ = k ? k.z : d.z + Math.sin(a) * 26;
+      this.emit({ k: "likeShot", fromX, fromZ, x: d.x, z: d.z, dmg: tc.likeShotDamage, kid: k?.id ?? 0, name });
+      this.hitBoss(tc.likeShotDamage, k);
+    }
+    return shots;
+  }
+
+  /**
+   * Hujan Meteor Dunia: after a warning, meteors fall across the whole map for `seconds`, more of
+   * them on the three leading kingdoms; then the mother meteor lands on `focusKey` (or the leader).
+   */
+  worldMeteor(focusKey: string | null = null) {
+    if ((this.phase !== "WAR" && this.phase !== "FINAL") || this.doomUntil > this.t) return false;
+    const c = this.cfg.worldMeteor;
+    const top = this.leaderboard().slice(0, 3);
+    const focus = (focusKey ? this.kingdomByKey(focusKey) : null) ?? top[0] ?? null;
+    const start = this.t + c.warnSeconds;
+    const rnd = () => this.rng.next();
+    for (let i = 0; i < c.count; i++) {
+      const at = start + (i / c.count) * c.seconds + rnd() * 0.3;
+      let x = 0;
+      let z = 0;
+      if (top.length && rnd() < c.topShare) {
+        const k = top[i % top.length];
+        const a = rnd() * Math.PI * 2;
+        const d = Math.sqrt(rnd()) * c.topSpread;
+        x = k.x + Math.cos(a) * d;
+        z = k.z + Math.sin(a) * d;
+      } else {
+        // anywhere there is something to hit: next to a random unit, else on random land
+        const alive = this.units.filter((u) => u.alive);
+        const u = alive.length ? alive[Math.floor(rnd() * alive.length)] : null;
+        if (u) {
+          x = u.x + (rnd() - 0.5) * 12;
+          z = u.z + (rnd() - 0.5) * 12;
+        } else {
+          for (let tries = 0; tries < 20; tries++) {
+            x = (rnd() - 0.5) * WORLD_W * 0.9;
+            z = (rnd() - 0.5) * WORLD_H * 0.9;
+            if (this.map.biomeAt(x, z) !== "water") break;
+          }
+        }
+      }
+      const r = c.radius * (0.7 + rnd() * 0.7);
+      const k = r / c.radius;
+      this.strikes.push({ kid: 0, x, z, at, r, dmg: c.damage * k, castle: c.castleDamage * k });
+      this.emit({ k: "strike", x, z, r, delay: at - this.t, style: "meteor" });
+    }
+    const mx = focus?.x ?? this.map.altar.x;
+    const mz = focus?.z ?? this.map.altar.z;
+    const motherAt = start + c.seconds + c.motherDelay;
+    this.strikes.push({ kid: 0, x: mx, z: mz, at: motherAt, r: c.motherRadius, dmg: c.motherDamage, castle: c.motherCastleDamage });
+    this.emit({ k: "strike", x: mx, z: mz, r: c.motherRadius, delay: motherAt - this.t, style: "mother" });
+    this.doomUntil = motherAt + 2;
+    this.emit({ k: "doom", warn: c.warnSeconds, seconds: motherAt - this.t, x: mx, z: mz, target: focus?.id ?? null });
     return true;
   }
 
@@ -557,6 +686,7 @@ export class Sim {
     this.dragonSpawnedThisRound = false;
     this.zones = [];
     this.strikes = [];
+    this.doomUntil = -1;
     this.spellQueue = [];
     this.joinQueue = [];
     this.fallenThisRound = 0;
@@ -1011,7 +1141,7 @@ export class Sim {
       } else if (u.tKind === "dragon" && this.dragon) {
         tx = this.dragon.x;
         tz = this.dragon.z;
-        reach = st.range + 3;
+        reach = st.range + this.dragon.radius;
       } else if (u.tKind === "build") {
         const v = this.village(u.tId);
         if (!v || v.owner !== k.id || v.tower) {
@@ -1113,9 +1243,7 @@ export class Sim {
             if (tCastle.hp <= 0) this.fall(tCastle, k);
           } else if (this.dragon) {
             const bonus = this.dragon.summonedBy === k.id ? 1 + this.cfg.dragon.giftDamageBonus : 1;
-            this.dragon.hp -= dmg * bonus;
-            this.dragon.damage.set(k.id, (this.dragon.damage.get(k.id) ?? 0) + dmg * bonus);
-            if (this.dragon.hp <= 0) this.killDragon();
+            this.hitBoss(dmg * bonus, k);
           }
         }
       }
@@ -1307,7 +1435,10 @@ export class Sim {
       const due = this.strikes.filter((s) => s.at <= this.t);
       if (due.length) {
         this.strikes = this.strikes.filter((s) => s.at > this.t);
-        for (const s of due) this.meteorImpact(s.kid, s.x, s.z);
+        for (const s of due) {
+          if (s.kid) this.meteorImpact(s.kid, s.x, s.z);
+          else this.worldImpact(s.x, s.z, s.r ?? 4, s.dmg ?? 100, s.castle ?? 0);
+        }
       }
     }
     this.spellTimer += dt;
@@ -1468,42 +1599,216 @@ export class Sim {
     this.emit({ k: "impact", x, z, r: c.radius, dmg: total });
   }
 
-  // ---------------------------------------------------------------- dragon
+  /** Damage from a world event or a boss: nobody gets the kill. Shielded kingdoms are spared. */
+  private hurt(o: Unit, dmg: number) {
+    if (!o.alive) return;
+    const owner = this.kingdomById(o.kid);
+    if (owner && this.shielded(owner)) return;
+    o.hp -= dmg;
+    o.hitAt = this.t;
+    if (o.hp > 0) return;
+    o.alive = false;
+    if (owner) {
+      owner.unitCount = Math.max(0, owner.unitCount - 1);
+      if (o.passive) owner.passiveCount = Math.max(0, owner.passiveCount - 1);
+    }
+    this.emit({ k: "death", x: o.x, z: o.z, kid: o.kid, type: o.type, id: o.id, heading: o.heading });
+  }
+
+  /** A blast that belongs to nobody: units lose health toward the edge, castles a fixed amount. */
+  private blast(x: number, z: number, r: number, dmg: number, castleDmg: number) {
+    let total = 0;
+    this.forNear(x, z, r, (o) => {
+      const d = Math.hypot(o.x - x, o.z - z);
+      if (d > r) return;
+      const v = dmg * (1 - 0.5 * (d / r));
+      total += v;
+      this.hurt(o, v);
+    });
+    if (castleDmg > 0)
+      for (const e of this.kingdoms) {
+        if (!e.alive || this.shielded(e) || Math.hypot(e.x - x, e.z - z) > r + 3) continue;
+        e.hp -= castleDmg;
+        total += castleDmg;
+        if (e.hp <= 0) this.fall(e, null);
+      }
+    return total;
+  }
+
+  private worldImpact(x: number, z: number, r: number, dmg: number, castleDmg: number) {
+    const total = this.blast(x, z, r, dmg, castleDmg);
+    this.emit({ k: "impact", x, z, r, dmg: total });
+  }
+
+  // ---------------------------------------------------------------- dragon and the other bosses
 
   private updateDragon(dt: number) {
     const d = this.dragon;
-    if (!d) return;
+    if (!d || (this.phase !== "WAR" && this.phase !== "FINAL")) return;
+    if (d.kind === "titan") return this.updateTitan(d, dt);
+    if (d.kind === "elder") this.updateElder(d, dt);
     d.cd -= dt;
     if (d.cd > 0) return;
-    const dc = this.cfg.dragon;
+    const elder = d.kind === "elder";
+    const st = elder ? this.cfg.elder : this.cfg.dragon;
     let target: Unit | null = null;
-    let bd = dc.range;
-    this.forNear(d.x, d.z, dc.range, (o) => {
+    let bd = st.range;
+    this.forNear(d.x, d.z, st.range, (o) => {
+      const k = this.kingdomById(o.kid);
+      if (k && this.shielded(k)) return;
       const dist = Math.hypot(o.x - d.x, o.z - d.z);
       if (dist < bd) {
         bd = dist;
         target = o;
       }
     });
-    if (!target) return;
+    if (!target) {
+      // Naga Purba burns the castle it hunts when no troops stand in its way
+      const prey = elder ? this.kingdomById(d.prey) : null;
+      if (prey && prey.alive && !this.shielded(prey) && Math.hypot(prey.x - d.x, prey.z - d.z) <= st.range) {
+        d.cd = st.cooldown;
+        d.attackAt = this.t;
+        this.emit({ k: "shot", fromX: d.x, fromZ: d.z, x: prey.x, z: prey.z, type: "dragon", dmg: this.cfg.elder.castleDamage, on: "castle" });
+        prey.hp -= this.cfg.elder.castleDamage;
+        if (prey.hp <= 0) this.fall(prey, null);
+      }
+      return;
+    }
     const t: Unit = target;
-    d.cd = dc.cooldown;
+    d.cd = st.cooldown;
     d.attackAt = this.t;
-    this.emit({ k: "shot", fromX: d.x, fromZ: d.z, x: t.x, z: t.z, type: "dragon", dmg: dc.dmg, on: "unit" });
-    this.forNear(t.x, t.z, dc.splash, (o) => {
-      if (Math.hypot(o.x - t.x, o.z - t.z) > dc.splash) return;
-      o.hp -= dc.dmg;
-      o.hitAt = this.t;
-      if (o.hp <= 0 && o.alive) {
-        o.alive = false;
-        const owner = this.kingdomById(o.kid);
-        if (owner) {
-          owner.unitCount = Math.max(0, owner.unitCount - 1);
-          if (o.passive) owner.passiveCount = Math.max(0, owner.passiveCount - 1);
-        }
-        this.emit({ k: "death", x: o.x, z: o.z, kid: o.kid, type: o.type, id: o.id, heading: o.heading });
+    this.emit({ k: "shot", fromX: d.x, fromZ: d.z, x: t.x, z: t.z, type: "dragon", dmg: st.dmg, on: "unit" });
+    this.forNear(t.x, t.z, st.splash, (o) => {
+      if (Math.hypot(o.x - t.x, o.z - t.z) <= st.splash) this.hurt(o, st.dmg);
+    });
+  }
+
+  /** The kingdom a moving boss goes after: the leader that is not shielded. */
+  private bossPrey(d: Dragon) {
+    if (this.t < d.retargetAt && this.kingdomById(d.prey)?.alive) return this.kingdomById(d.prey);
+    const lead = this.leaderboard().find((k) => !this.shielded(k)) ?? null;
+    d.prey = lead?.id ?? 0;
+    d.retargetAt = this.t + (d.kind === "elder" ? this.cfg.elder.retargetSeconds : this.cfg.titan.retargetSeconds);
+    return lead;
+  }
+
+  private moveBoss(d: Dragon, tx: number, tz: number, speed: number, stopAt: number, dt: number) {
+    d.tx = tx;
+    d.tz = tz;
+    const dist = Math.hypot(tx - d.x, tz - d.z);
+    if (dist <= stopAt) return false;
+    const step = Math.min(dist - stopAt, speed * dt);
+    d.x += ((tx - d.x) / dist) * step;
+    d.z += ((tz - d.z) / dist) * step;
+    return true;
+  }
+
+  /** Naga Purba flies to the leading kingdom and every few seconds pours a line of hellfire. */
+  private updateElder(d: Dragon, dt: number) {
+    const ec = this.cfg.elder;
+    const prey = this.bossPrey(d);
+    if (prey) this.moveBoss(d, prey.x, prey.z, ec.speed, ec.range * 0.7, dt);
+    d.special -= dt;
+    if (d.special > 0 || !prey) return;
+    // it saves its fire until the prey is within reach of the breath
+    const dist = Math.hypot(prey.x - d.x, prey.z - d.z) || 1;
+    if (dist > ec.range * 2.5) return;
+    d.special = ec.infernoEvery;
+    const ux = (prey.x - d.x) / dist;
+    const uz = (prey.z - d.z) / dist;
+    this.emit({ k: "boss", kind: "elder", act: "inferno", x: prey.x, z: prey.z, r: ec.infernoRadius });
+    const half = ((ec.infernoCount - 1) * ec.infernoSpacing) / 2;
+    for (let i = 0; i < ec.infernoCount; i++) {
+      // the line of fire is laid across the prey's castle, along the dragon's line of flight
+      const along = i * ec.infernoSpacing - half;
+      const x = prey.x + ux * along;
+      const z = prey.z + uz * along;
+      const at = this.t + 0.5 + i * 0.18;
+      this.strikes.push({ kid: 0, x, z, at, r: ec.infernoRadius, dmg: ec.infernoDamage, castle: ec.infernoCastleDamage });
+      this.emit({ k: "strike", x, z, r: ec.infernoRadius, delay: at - this.t, style: "inferno" });
+    }
+  }
+
+  /** The Titan walks to the leading kingdom, smashes what is near, shakes the ground, and leaves in a rage. */
+  private updateTitan(d: Dragon, dt: number) {
+    const tc = this.cfg.titan;
+    if (this.t >= d.until) {
+      // time is up: one last blow on the leader's castle, then it walks out of the world
+      const lead = this.leaderboard().find((k) => !this.shielded(k));
+      if (lead) {
+        this.emit({ k: "boss", kind: "titan", act: "rampage", x: lead.x, z: lead.z, r: tc.slamRadius * 1.6 });
+        this.blast(lead.x, lead.z, tc.slamRadius * 1.6, tc.slamDamage * 2, tc.rampageCastleDamage);
+      }
+      this.dragon = null;
+      this.emit({ k: "dragon", state: "leave", by: null, kind: "titan", x: d.x, z: d.z });
+      return;
+    }
+    if (d.windup) {
+      if (this.t < d.windup.at) return;
+      const w = d.windup;
+      d.windup = null;
+      d.attackAt = this.t;
+      if (w.act === "slam") {
+        this.emit({ k: "boss", kind: "titan", act: "slam", x: w.x, z: w.z, r: tc.slamRadius });
+        this.blast(w.x, w.z, tc.slamRadius, tc.slamDamage, tc.castleDamage);
+      } else {
+        this.emit({ k: "boss", kind: "titan", act: "quake", x: d.x, z: d.z, r: tc.quakeRadius });
+        this.blast(d.x, d.z, tc.quakeRadius, tc.quakeDamage, 0);
+      }
+      return;
+    }
+    const prey = this.bossPrey(d);
+    let crowd = 0;
+    let near: Unit | null = null;
+    let nd = tc.range + d.radius;
+    this.forNear(d.x, d.z, tc.quakeRadius, (o) => {
+      const k = this.kingdomById(o.kid);
+      if (k && this.shielded(k)) return;
+      const dist = Math.hypot(o.x - d.x, o.z - d.z);
+      if (dist <= tc.quakeRadius) crowd++;
+      if (dist < nd) {
+        nd = dist;
+        near = o;
       }
     });
+    d.cd -= dt;
+    d.special -= dt;
+    // a crowd at its feet: stamp the ground
+    if (d.special <= 0 && crowd >= 6) {
+      d.special = tc.quakeEvery;
+      d.windup = { act: "quake", at: this.t + tc.quakeWindupSeconds, x: d.x, z: d.z };
+      this.emit({ k: "boss", kind: "titan", act: "quakeWindup", x: d.x, z: d.z, r: tc.quakeRadius });
+      return;
+    }
+    const castleNear = prey && Math.hypot(prey.x - d.x, prey.z - d.z) <= tc.range + d.radius + 2 ? prey : null;
+    const target: { x: number; z: number } | null = castleNear ?? near;
+    if (target && d.cd <= 0) {
+      d.cd = tc.cooldown;
+      // the club lands a little in front of it, toward the target
+      const dist = Math.hypot(target.x - d.x, target.z - d.z) || 1;
+      const reach = Math.min(dist, tc.range);
+      const x = d.x + ((target.x - d.x) / dist) * reach;
+      const z = d.z + ((target.z - d.z) / dist) * reach;
+      d.tx = target.x;
+      d.tz = target.z;
+      d.windup = { act: "slam", at: this.t + tc.windupSeconds, x, z };
+      this.emit({ k: "boss", kind: "titan", act: "windup", x, z, r: tc.slamRadius });
+      return;
+    }
+    if (!target && prey) this.moveBoss(d, prey.x, prey.z, tc.speed * this.map.speedFactor(d.x, d.z), d.radius + 3, dt);
+    else if (near && !castleNear) this.moveBoss(d, (near as Unit).x, (near as Unit).z, tc.speed, tc.range, dt);
+  }
+
+  /** Damage to the boss from a kingdom (or from nobody, a viewer without a kingdom). */
+  private hitBoss(dmg: number, by: Kingdom | null) {
+    const d = this.dragon;
+    if (!d) return;
+    d.hp -= dmg;
+    if (by) {
+      d.damage.set(by.id, (d.damage.get(by.id) ?? 0) + dmg);
+      d.lastHit = by.id;
+    }
+    if (d.hp <= 0) this.killDragon();
   }
 
   private killDragon() {
@@ -1520,10 +1825,24 @@ export class Sim {
     this.dragon = null;
     if (best) {
       best.dragonDamage += bd;
-      this.gainExp(best, this.cfg.dragon.rewardExp);
-      this.makeUnit(best, "dragon", false, null, { x: d.x, z: d.z });
+      if (d.kind === "dragon") {
+        this.gainExp(best, this.cfg.dragon.rewardExp);
+        this.makeUnit(best, "dragon", false, null, { x: d.x, z: d.z });
+      } else if (d.kind === "elder") {
+        const ec = this.cfg.elder;
+        this.gainExp(best, this.cfg.dragon.rewardExp * ec.rewardExpMultiplier);
+        for (let i = 0; i < ec.rewardLevels; i++) this.gainExp(best, Math.max(0, best.nextExp - best.exp));
+        for (let i = 0; i < ec.rewardDragons; i++) this.makeUnit(best, "dragon", false, null, { x: d.x + i * 3, z: d.z });
+      } else {
+        const tc = this.cfg.titan;
+        for (let i = 0; i < tc.rewardLevels; i++) this.gainExp(best, Math.max(0, best.nextExp - best.exp));
+        this.spawnUnits(best, tc.rewardUnits as UnitBundle, "titan", null, false);
+      }
     }
-    this.emit({ k: "dragon", state: "dead", by: best?.id ?? null });
+    // the killing blow on the Titan earns a level of its own
+    const last = d.kind === "titan" ? this.kingdomById(d.lastHit) : null;
+    if (last && last.alive) for (let i = 0; i < this.cfg.titan.lastHitLevels; i++) this.gainExp(last, Math.max(0, last.nextExp - last.exp));
+    this.emit({ k: "dragon", state: "dead", by: best?.id ?? null, kind: d.kind, x: d.x, z: d.z });
   }
 
   // ---------------------------------------------------------------- territory and score
