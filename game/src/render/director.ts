@@ -70,8 +70,19 @@ export class Director {
       this.propose({ x: k.x, z: k.z, dist: 44, priority: 40, label: "join", seconds: 2.5 }, now);
     } else if (e.k === "village" && e.prev && k) this.propose({ x: sim.village(e.id)!.x, z: sim.village(e.id)!.z, dist: 40, priority: 30, label: "village", seconds: 3 }, now);
     else if (e.k === "spell") this.propose({ x: e.x, z: e.z, dist: e.spell === "heal" || e.spell === "rage" ? 44 : 38, priority: 65, label: "spell", seconds: Math.min(6, 3 + e.seconds * 0.4) }, now);
-    else if (e.k === "dragon") this.propose({ x: this.map.altar.x, z: this.map.altar.z, dist: 52, priority: 90, label: "dragon", seconds: 5 }, now);
+    else if (e.k === "dragon") {
+      const big = e.kind !== "dragon";
+      this.propose({ x: e.x, z: e.z, dist: big ? 82 : 52, priority: e.state === "spawn" ? 95 : 90, label: "dragon", seconds: big ? 7 : 5 }, now);
+    } else if (e.k === "boss" && e.act === "rampage") this.propose({ x: e.x, z: e.z, dist: 70, priority: 95, label: "dragon", seconds: 4 }, now);
+    else if (e.k === "doom") {
+      // first the sky over the field, then the target as the mother meteor comes down
+      this.propose({ x: e.x, z: e.z, dist: 150, priority: 92, label: "doom", seconds: e.warn + 5 }, now);
+      this.later.push({ at: now + e.seconds - 5.5, shot: { x: e.x, z: e.z, dist: 105, priority: 100, label: "doom", seconds: 9 } });
+    }
   }
+
+  /** Shots booked for later (the mother meteor's fall). */
+  private later: { at: number; shot: Omit<Shot, "until"> & { seconds: number } }[] = [];
 
   /** Pick an idle shot when nothing important is happening. */
   private idle(sim: Sim, now: number) {
@@ -89,8 +100,9 @@ export class Director {
       this.propose({ x: 0, z: 0, dist: 420 * WORLD_SCALE, priority: 5, label: "overview", seconds: sim.phase === "WAR" || sim.phase === "FINAL" ? 6 : 8 }, now);
       return;
     }
-    if (sim.dragon && Math.random() < 0.35) {
-      this.propose({ x: sim.dragon.x, z: sim.dragon.z, dist: 50, priority: 10, label: "dragon", seconds: 5 }, now);
+    const big = sim.dragon && sim.dragon.kind !== "dragon";
+    if (sim.dragon && Math.random() < (big ? 0.6 : 0.35)) {
+      this.propose({ x: sim.dragon.x, z: sim.dragon.z, dist: big ? 72 : 50, priority: 10, label: "dragon", seconds: 5 }, now);
       return;
     }
     // biggest fight: unit with most enemies within 10 m (sampled)
@@ -121,6 +133,11 @@ export class Director {
 
   update(sim: Sim, now: number, dt: number) {
     if (!this.enabled) return;
+    if (this.later.length) {
+      const due = this.later.filter((l) => now >= l.at);
+      this.later = this.later.filter((l) => now < l.at);
+      for (const l of due) this.propose(l.shot, now);
+    }
     if (!this.shot || now >= this.shot.until) this.idle(sim, now);
     const s = this.shot!;
     this.target.set(s.x, this.map.heightAt(s.x, s.z), s.z);

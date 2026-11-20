@@ -14,7 +14,7 @@ import { Sim } from "./sim/world";
 import { Atmosphere } from "./render/atmosphere";
 import { paintLightPool, parseTimeMode, type PoolLight } from "./render/daycycle";
 import { WeatherRenderer } from "./render/weather";
-import { LABELS } from "./render/weathercycle";
+import { CLEAR_FX, LABELS, type WeatherFx } from "./render/weathercycle";
 import { buildTerrain, TERRITORY_TILE } from "./render/terrain";
 import { createScene } from "./render/scene";
 import { CastleRenderer } from "./render/castles";
@@ -118,6 +118,28 @@ if (studio) {
 const demo = Number(params.get("demo") ?? 0);
 for (let i = 0; i < demo; i++) sim.join(`demo${i + 1}`, `Demo${i + 1}`);
 
+// ---------------------------------------------------------------- world events (tests and the milestone system)
+
+/** meteor = Hujan Meteor Dunia, titan = Titan Neraka, elder = Naga Purba, dragon = Naga Dunia. */
+type WorldEvent = "meteor" | "titan" | "elder" | "dragon";
+function worldEvent(kind: WorldEvent, by: string | null = null) {
+  if (sim.phase === "LOBBY") sim.nextPhase();
+  if (kind === "meteor") return sim.worldMeteor(by);
+  if (sim.dragon) sim.dragon = null;
+  return sim.summonBoss(kind, by);
+}
+// ?event=meteor|titan|elder fires that event a few seconds into the war (for checking the effects)
+const eventParam = params.get("event") as WorldEvent | null;
+if (eventParam) {
+  let fired = false;
+  const timer = setInterval(() => {
+    if (fired || sim.phase !== "WAR" || sim.warElapsed < 3) return;
+    fired = true;
+    clearInterval(timer);
+    worldEvent(eventParam);
+  }, 250);
+}
+
 // ---------------------------------------------------------------- live bridge
 
 const router = new LiveRouter(sim);
@@ -220,13 +242,33 @@ if (weather) {
   };
 }
 const skyFocus = new THREE.Vector3();
+// Hujan Meteor Dunia darkens the light and turns the air the colour of embers
+const doomVeil = document.createElement("div");
+doomVeil.style.cssText =
+  "position:fixed;inset:0;pointer-events:none;opacity:0;z-index:4;background:radial-gradient(ellipse at 50% 35%, rgba(255,90,20,0.10) 0%, rgba(120,20,8,0.35) 60%, rgba(30,4,2,0.75) 100%)";
+document.body.appendChild(doomVeil);
+const doomFx: WeatherFx = { ...CLEAR_FX };
+const DOOM_TINT = new THREE.Color(0x6a1e10);
+const tintTmp = new THREE.Color();
+function doomed(base: WeatherFx, doom: number): WeatherFx {
+  if (doom <= 0) return base;
+  doomFx.sun = base.sun * (1 - 0.55 * doom);
+  doomFx.ambient = base.ambient * (1 - 0.3 * doom);
+  doomFx.shade = base.shade + 0.2 * doom;
+  doomFx.tint = tintTmp.set(base.tint).lerp(DOOM_TINT, doom).getHex();
+  doomFx.tintAmount = Math.max(base.tintAmount, 0.8 * doom);
+  doomFx.flash = base.flash;
+  return doomFx;
+}
 /** Weather first, then the light it changes, then what the ground and the sea need from both. */
 function updateSky(t: number, dt: number) {
   if (studio) return;
   skyFocus.copy(controls ? controls.target : director.focus);
   skyFocus.y = 0;
   weather?.update(sim.phase, sim.phaseT, sim.cfg.round, sim.roundId, t, dt, skyFocus, atmosphere.night);
-  atmosphere.update(sim.phase, sim.phaseT, sim.cfg.round, dt, weather?.fx);
+  const doom = fx.doom.level(t);
+  doomVeil.style.opacity = String(doom * 0.6);
+  atmosphere.update(sim.phase, sim.phaseT, sim.cfg.round, dt, doomed(weather?.fx ?? CLEAR_FX, doom));
   terrain.setSun(atmosphere.sunOffset, view.sun.color, view.sun.intensity);
 }
 /** Warm light on the ground around castles, villages, landmarks and the altar, once it gets dark. */
@@ -252,9 +294,15 @@ const perf = params.has("perf") ? new PerfOverlay(view.renderer) : null;
 const clock = new THREE.Clock();
 let fps = 60;
 let paintTimer = 0;
+/**
+ * Once a test drives frames by hand (__em.run), it owns the clock: real frames keep drawing but
+ * no longer move the sim or the time, so effects stay in step with the sim however slow the
+ * hand-driven frames are.
+ */
+let manualNow: number | null = null;
 function frame() {
-  const dt = Math.min(clock.getDelta(), 0.1);
-  const t = clock.elapsedTime;
+  const dt = manualNow === null ? Math.min(clock.getDelta(), 0.1) : 0;
+  const t = manualNow ?? clock.elapsedTime;
   fps = fps * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
   perf?.begin("sim");
   sim.advance(dt);
@@ -305,11 +353,12 @@ setInterval(() => {
 
 Object.assign(window, {
   __em: {
-    sim, map, view, atmosphere, weather, units, villages, fx, hud, director, router, controls, perf, life, liveState: () => liveState,
+    sim, map, view, atmosphere, weather, units, villages, fx, hud, director, router, controls, perf, life, liveState: () => liveState, event: worldEvent,
     render: () => view.renderer.render(view.scene, view.camera),
     /** Advance the sim and draw once. The browser pane throttles rAF, so tests drive frames by hand. */
     run: (seconds: number) => {
-      const now = clock.elapsedTime + seconds;
+      manualNow = (manualNow ?? clock.elapsedTime) + seconds;
+      const now = manualNow;
       for (let i = 0; i < seconds * 20; i++) sim.step(0.05);
       dispatch(now);
       paintTerritory();
@@ -318,7 +367,7 @@ Object.assign(window, {
       units.update(sim, now);
       fxTime = now;
       fx.update(sim, now);
-      for (let i = 0; i < 60; i++) director.update(sim, now, 0.05);
+      for (let i = 0; i < Math.min(60, Math.ceil(seconds * 20)); i++) director.update(sim, now, 0.05);
       terrain.update(now);
       updateSky(now, seconds);
       paintNightLights();

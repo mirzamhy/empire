@@ -4,8 +4,14 @@ import "./hud.css";
 import { SPELL_COLOR, SPELL_ICON, SPELL_LABEL, UNIT_ICON, type UnitBundle, type UnitType } from "../sim/config";
 import { WORLD_H, WORLD_W, type WorldMap } from "../sim/map";
 import { THEME } from "../render/theme";
-import type { Kingdom, Sim, SimEvent } from "../sim/world";
+import { BOSS_NAME, type BossKind, type Kingdom, type Sim, type SimEvent } from "../sim/world";
 import { describeUnits } from "../live/router";
+
+const BOSS_LOOK: Record<BossKind, { icon: string; color: string; how: string; reward: string }> = {
+  dragon: { icon: "🐉", color: "#ff7a3d", how: "ketik BOSS untuk menyerbu", reward: "" },
+  elder: { icon: "🐲", color: "#ff3b1f", how: "ia memburu kerajaan terkuat · ketik BOSS", reward: "2 Naga + 1 level bergabung ke pasukannya" },
+  titan: { icon: "🗿", color: "#ff8a2a", how: "tap layar = lempar batu! · 90 dtk sebelum ia mengamuk", reward: "2 Golem + 1 level untuk penyerang terbesar" },
+};
 
 const el = (tag: string, cls = "", html = "") => {
   const e = document.createElement(tag);
@@ -34,6 +40,7 @@ export class Hud {
   private ticker = el("div", "ticker");
   private hint = el("div", "hint", "Ketik <b>IKUT</b> untuk punya kerajaan!");
   private center = el("div", "center");
+  private doom = el("div", "doom");
   private labels = el("div");
   private labelEls = new Map<number, HTMLElement>();
   private v = new THREE.Vector3();
@@ -54,7 +61,7 @@ export class Hud {
     this.radar.height = 225;
     const radarBox = el("div", "bar radar");
     radarBox.append(this.radar);
-    this.root.append(this.labels, top, this.board, radarBox, this.boss, this.toasts, this.ticker, this.hint, this.center);
+    this.root.append(this.labels, top, this.board, radarBox, this.boss, this.toasts, this.ticker, this.hint, this.center, this.doom);
     document.body.append(this.root);
   }
 
@@ -140,8 +147,23 @@ export class Hud {
         break;
       case "dragon": {
         const by = e.by ? s.kingdomById(e.by) : null;
-        if (e.state === "spawn") this.toast("🐉 NAGA DUNIA MUNCUL!", by ? `dipanggil oleh ${by.name} · ketik BOSS untuk menyerbu` : "ketik BOSS untuk menyerbu", "#ff7a3d");
-        else this.toast(by ? `🐉 ${by.name} menjinakkan Naga!` : "🐉 Naga Dunia tumbang", by ? "Naga bergabung ke pasukannya" : "", by?.color ?? "#ff7a3d");
+        const b = BOSS_LOOK[e.kind];
+        if (e.state === "spawn") this.toast(`${b.icon} ${BOSS_NAME[e.kind].toUpperCase()} MUNCUL!`, by ? `dipanggil oleh ${by.name} · ${b.how}` : b.how, b.color);
+        else if (e.state === "leave") this.toast(`${b.icon} ${BOSS_NAME[e.kind]} mengamuk lalu pergi`, "tidak ada yang berhasil menumbangkannya", b.color);
+        else if (e.kind === "dragon") this.toast(by ? `🐉 ${by.name} menjinakkan Naga!` : "🐉 Naga Dunia tumbang", by ? "Naga bergabung ke pasukannya" : "", by?.color ?? b.color);
+        else this.toast(by ? `${b.icon} ${by.name} menumbangkan ${BOSS_NAME[e.kind]}!` : `${b.icon} ${BOSS_NAME[e.kind]} tumbang`, by ? b.reward : "", by?.color ?? b.color);
+        this.boss.querySelector(".lbl")!.textContent = `${b.icon} ${BOSS_NAME[e.kind].toUpperCase()}`;
+        break;
+      }
+      case "boss":
+        if (e.act === "rampage") this.toast("🗿 AMUKAN TITAN!", "kastil terkuat dihantam sebelum Titan pergi", BOSS_LOOK.titan.color);
+        break;
+      case "doom": {
+        const target = e.target ? s.kingdomById(e.target) : null;
+        this.doomUntil = this.sim.t + e.seconds;
+        this.doomStart = this.sim.t + e.warn;
+        this.doomTarget = target?.name ?? "";
+        this.toast("☄️ HUJAN METEOR DUNIA!", target ? `Meteor Induk mengincar ${target.name}` : "langit terbakar", "#ff5a1a");
         break;
       }
       case "phase":
@@ -165,10 +187,42 @@ export class Hud {
     }
     const d = s.dragon;
     this.boss.classList.toggle("show", !!d);
-    if (d) (this.boss.querySelector("i") as HTMLElement).style.width = `${Math.max(0, (d.hp / d.maxHp) * 100)}%`;
+    if (d) {
+      (this.boss.querySelector("i") as HTMLElement).style.width = `${Math.max(0, (d.hp / d.maxHp) * 100)}%`;
+      const b = BOSS_LOOK[d.kind];
+      const left = d.kind === "titan" ? ` · ${Math.max(0, Math.ceil(d.until - s.t))} dtk` : "";
+      const label = `${b.icon} ${BOSS_NAME[d.kind].toUpperCase()}${left}`;
+      const lbl = this.boss.querySelector(".lbl")!;
+      if (lbl.textContent !== label) lbl.textContent = label;
+      this.boss.dataset.kind = d.kind;
+    }
+    this.renderDoom();
     this.hint.style.display = s.phase === "RESULT" ? "none" : "";
     this.renderCenter();
     this.renderLabels();
+  }
+
+  private doomUntil = -1;
+  private doomStart = -1;
+  private doomTarget = "";
+  private doomText = "";
+  /** The meteor rain banner: a warning, then the countdown to the mother meteor. */
+  private renderDoom() {
+    const t = this.sim.t;
+    const on = t < this.doomUntil + 1 && this.sim.phase !== "RESULT" && this.sim.phase !== "LOBBY";
+    this.doom.classList.toggle("show", on);
+    if (!on) return;
+    const left = Math.max(0, Math.ceil(this.doomUntil - t));
+    const html =
+      t < this.doomStart
+        ? `<div class="big">☄️ HUJAN METEOR DUNIA</div><div class="sub">langit terbakar dalam ${Math.ceil(this.doomStart - t)}…</div>`
+        : left > 0
+          ? `<div class="big">☄️ METEOR INDUK</div><div class="sub">jatuh${this.doomTarget ? ` di <b>${esc(this.doomTarget)}</b>` : ""} dalam <b>${left}</b> dtk</div>`
+          : `<div class="big">💥</div>`;
+    if (html !== this.doomText) {
+      this.doomText = html;
+      this.doom.innerHTML = html;
+    }
   }
 
   private renderBoard() {
@@ -220,9 +274,9 @@ export class Hud {
       c.stroke();
     }
     if (s.dragon) {
-      c.font = "18px sans-serif";
+      c.font = s.dragon.kind === "dragon" ? "18px sans-serif" : "26px sans-serif";
       c.textAlign = "center";
-      c.fillText("🐉", (s.dragon.x + WORLD_W / 2) * sx, (s.dragon.z + WORLD_H / 2) * sz + 6);
+      c.fillText(BOSS_LOOK[s.dragon.kind].icon, (s.dragon.x + WORLD_W / 2) * sx, (s.dragon.z + WORLD_H / 2) * sz + 6);
     }
   }
 
