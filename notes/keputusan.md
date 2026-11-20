@@ -132,3 +132,14 @@ Format: `D-xxx` · tanggal · keputusan · alasan. Keputusan baru ditambah di ba
 - Kolam rawa dibuat sendiri karena di gambar tertutup tanaman. Lembah di dalam pegunungan juga dibuat dengan noise.
 - 6 sungai bernama (9 ruas) dan 10 landmark. Peta 1 sampai 4 tetap bisa dibuka dengan `?map=1|2|3|4`.
 - Balance belum disetel: pada 8 seed dengan 20 kerajaan, 4 ronde selesai dengan satu pemenang (603 sampai 767 detik) dan 4 ronde berjalan sampai batas 960 detik dengan 2 sampai 3 kerajaan tersisa.
+
+## D-034: Tiga event dunia untuk milestone like (2026-11-19)
+
+Bagian pertama dari `rencana-donasi-like.md`. Event dan visualnya sudah ada; sistem milestone like yang memicunya belum dibuat.
+
+- **Hujan Meteor Dunia** (`sim.worldMeteor`): peringatan 4 dtk, lalu 150 meteor selama 20 dtk (55% di sekitar 3 kerajaan teratas), lalu Meteor Induk jatuh pelan selama 5 dtk ke kerajaan sasaran (pilihan MVP, atau peringkat 1). Kerusakannya milik "dunia": tidak ada yang mendapat kill, kerajaan berperisai aman. Langit menggelap merah selama event, dengan banner hitung mundur.
+- **Titan Neraka** (`summonBoss("titan")`): satu boss untuk semua peta (bukan empat boss per peta seperti di rancangan awal). Berjalan ke pemimpin klasemen, menghantam dengan gada (ada ancang-ancang 0,7 dtk dan cincin merah di tanah), menghentak tanah kalau dikerubungi. Setiap 50 like dari satu penonton menjadi satu batu yang dilempar ke Titan, termasuk dari penonton yang belum ikut. Kalau tidak tumbang dalam 90 dtk, ia menghantam kastil pemimpin (900) lalu pergi. Hadiah: 2 Golem + 1 level untuk penyerang terbesar, +1 level untuk pukulan terakhir.
+- **Naga Purba** (`summonBoss("elder")`): naga terpisah dari Naga Dunia, HP 3x. Terbang ke pemimpin klasemen dan setiap 12 dtk menyemburkan garis api neraka melintang di atas kastilnya. Hadiah: EXP 2x, 2 Naga, dan +1 level.
+- Hanya satu boss di medan pada satu waktu. Naga Dunia yang terjadwal di detik 600 menunggu sampai medan kosong.
+- Model baru di `render/bosses/` (Titan sekitar 15 m, Naga Purba bentang sayap sekitar 50 m). Naga Dunia ikut pindah ke renderer boss tanpa perubahan tampilan.
+- Uji coba: `?event=meteor|titan|elder` di alamat game, atau `__em.event("titan")` di konsol.
