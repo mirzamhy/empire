@@ -4,8 +4,9 @@ import * as THREE from "three";
 import type { WorldMap } from "../sim/map";
 import type { HitTarget, Sim, SimEvent } from "../sim/world";
 import type { UnitType } from "../sim/config";
-import { modelFor } from "./units/rig";
 import { SpellFx } from "./spellfx";
+import { BossRenderer } from "./bosses/bosses";
+import { DoomFx } from "./doomfx";
 
 type ShotType = UnitType | "tower" | "dragon";
 
@@ -350,14 +351,10 @@ export class Fx {
   private p = new THREE.Vector3();
   private s = new THREE.Vector3();
   private c = new THREE.Color();
-  private dragon: THREE.Group;
-  private dragonLimbs: { rightArm?: THREE.Object3D; leftArm?: THREE.Object3D };
-  private dragonJaw?: THREE.Object3D;
-  private dragonNeck?: THREE.Object3D;
-  private dragonMouth?: THREE.Object3D;
-  private dragonYaw = 0;
-  private dragonAim = 0;
-  private dragonBreathUntil = -9;
+  /** the World Dragon, Naga Purba and the Titan */
+  readonly bosses: BossRenderer;
+  /** Hujan Meteor Dunia and hellfire */
+  readonly doom: DoomFx;
   /** Fire streams: flames pour from a mouth to a target for a short while. id = unit, undefined = World Dragon. */
   private breaths: { id?: number; tx: number; ty: number; tz: number; t0: number; until: number; scale: number }[] = [];
   /** World position of a unit's socket; wired by main.ts to the unit renderer. */
@@ -405,19 +402,10 @@ export class Fx {
       this.rings.mesh, this.scorch.mesh, this.pillarMesh, this.rubbleMesh, this.numbers.mesh,
     );
 
-    // World Dragon: the unit model at its top tier, gold where units carry the kingdom colour
-    const dragonModel = modelFor("dragon", 3, "#d4a017", "#facc15");
-    this.dragon = dragonModel.root;
-    this.dragonLimbs = { rightArm: dragonModel.bones.wingR, leftArm: dragonModel.bones.wingL };
-    this.dragonJaw = dragonModel.bones.jaw;
-    this.dragonNeck = dragonModel.bones.neck1;
-    this.dragonMouth = dragonModel.sockets.mouth;
-    this.dragon.scale.setScalar(2.6);
-    this.dragon.visible = false;
-    this.group.add(this.dragon);
-
     this.spells = new SpellFx(this, map);
-    this.group.add(this.spells.group);
+    this.bosses = new BossRenderer(this, map);
+    this.doom = new DoomFx(this, map);
+    this.group.add(this.spells.group, this.bosses.group, this.doom.group);
   }
 
   private instanced(geo: THREE.BufferGeometry, mat: THREE.Material, cap: number) {
@@ -434,7 +422,18 @@ export class Fx {
     if (sim) this.kingdomColor = (kid) => sim.kingdomById(kid)?.color ?? "#ffffff";
     const h = (x: number, z: number) => this.map.heightAt(x, z);
     this.spells.onEvent(e, now, sim);
+    this.bosses.onEvent(e, now);
+    this.doom.onEvent(e, now);
     switch (e.k) {
+      case "likeShot": {
+        // a stone from the crowd, arcing up to the Titan's chest; hearts where it leaves
+        const fy = h(e.fromX, e.fromZ) + 4.5;
+        const ty = h(e.x, e.z) + 9;
+        const d = Math.hypot(e.x - e.fromX, e.z - e.fromZ);
+        this.bolts.push({ type: "tower", fx: e.fromX, fz: e.fromZ, fy, tx: e.x, tz: e.z, ty, cx: e.x, cz: e.z, t0: now, dur: Math.max(0.4, d / 30), arc: 0.25 * d, dmg: e.dmg, on: "dragon" });
+        this.burst(this.sparks, e.fromX, fy, e.fromZ, now, 5, 0xff6b9a, 2, 1.2, 0.6, 1.2, -1);
+        break;
+      }
       case "shot": {
         if (this.bolts.length >= 500) this.bolts.shift();
         const d = Math.hypot(e.x - e.fromX, e.z - e.fromZ);
@@ -455,11 +454,8 @@ export class Fx {
         if (dragon) {
           // flames leave the mouth for 0.65 s; the World Dragon (no id) also turns to face its target
           const world = e.id === undefined;
-          this.breaths.push({ id: e.id, tx, ty, tz, t0: now, until: now + 0.65, scale: world ? 2.2 : 1 });
-          if (world) {
-            this.dragonAim = Math.atan2(e.x - e.fromX, e.z - e.fromZ);
-            this.dragonBreathUntil = now + 0.65;
-          }
+          this.breaths.push({ id: e.id, tx, ty, tz, t0: now, until: now + 0.65, scale: world ? this.bosses.breathScale : 1 });
+          if (world) this.bosses.aim(e.fromX, e.fromZ, e.x, e.z, now);
         }
         else if (e.type === "wizard") this.burst(this.glow, e.fromX, h(e.fromX, e.fromZ) + 1.5, e.fromZ, now, 4, 0xff9a3a, 1.5, 0.25, 0.3);
         break;
@@ -498,9 +494,6 @@ export class Fx {
           if (v && k) this.villageTaken(v.x, v.z, k.color, e.prev !== 0, sim.cfg.villages.claimRadius, now);
         }
         break;
-      case "dragon":
-        if (e.state === "dead" && sim?.dragon) this.explosion(sim.dragon.x, h(sim.dragon.x, sim.dragon.z) + 4, sim.dragon.z, now, 2.2, 0xff5a1a);
-        break;
       case "phase":
         if (e.phase === "LOBBY") this.reset();
         break;
@@ -518,6 +511,7 @@ export class Fx {
     this.scorch.clear();
     this.numbers.clear();
     this.castleDmg.clear();
+    this.doom.reset();
   }
 
   // ---------------------------------------------------------------- effect builders
@@ -645,10 +639,7 @@ export class Fx {
       // mouth position: the unit's socket, or the World Dragon model's own mouth marker
       if (b.id !== undefined) {
         if (!this.socketOf(b.id, "mouth", this.p)) continue;
-      } else if (this.dragonMouth && this.dragon.visible) {
-        this.dragon.updateMatrixWorld(true);
-        this.dragonMouth.getWorldPosition(this.p);
-      } else continue;
+      } else if (!this.bosses.mouth(this.p)) continue;
       const dx = b.tx - this.p.x;
       const dy = b.ty - this.p.y;
       const dz = b.tz - this.p.z;
@@ -774,27 +765,8 @@ export class Fx {
     this.scorch.update(now);
     this.numbers.update(now);
 
-    const d = sim.dragon;
-    this.dragon.visible = !!d;
-    if (d) {
-      const flap = Math.sin(now * 4) * 0.5;
-      if (this.dragonLimbs.rightArm) this.dragonLimbs.rightArm.rotation.z = -flap;
-      if (this.dragonLimbs.leftArm) this.dragonLimbs.leftArm.rotation.z = flap;
-      this.dragon.position.set(d.x, this.map.heightAt(d.x, d.z) + 4 + Math.sin(now * 4) * 0.4, d.z);
-      // circle slowly; while breathing, turn to the target, open the jaw and reach down with the neck
-      const breathing = now < this.dragonBreathUntil;
-      if (breathing) {
-        const diff = Math.atan2(Math.sin(this.dragonAim - this.dragonYaw), Math.cos(this.dragonAim - this.dragonYaw));
-        this.dragonYaw += diff * Math.min(1, dt * 10);
-      } else this.dragonYaw += dt * 0.5;
-      this.dragon.rotation.y = this.dragonYaw;
-      const open = breathing ? 1 : 0;
-      if (this.dragonJaw) this.dragonJaw.rotation.x += (open * 0.6 - this.dragonJaw.rotation.x) * Math.min(1, dt * 14);
-      if (this.dragonNeck) this.dragonNeck.rotation.x += (-0.95 + open * 0.75 - this.dragonNeck.rotation.x) * Math.min(1, dt * 10);
-      const hit = sim.t - d.attackAt;
-      this.dragon.scale.setScalar(2.6 + (hit >= 0 && hit < 0.3 ? 0.15 : 0));
-      if (Math.random() < dt * 6) this.burst(this.glow, d.x, this.dragon.position.y + 1.5, d.z, now, 1, 0xff5a1a, 0.6, 0.4, 0.6, 1, -1.5);
-    }
+    this.bosses.update(sim, now, dt);
+    this.doom.update(now, dt);
   }
 
   private updateBolts(now: number) {

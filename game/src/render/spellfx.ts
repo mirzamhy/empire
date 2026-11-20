@@ -286,6 +286,8 @@ export class SpellFx {
         else if (e.spell === "rage") this.castRage(e.x, e.z, e.kid, sim);
         break;
       case "strike": {
+        // world events (meteor rain, hellfire) are drawn by doomfx.ts
+        if (e.style) break;
         const y = this.ground(e.x, e.z);
         if (this.meteors.length >= 24) this.meteors.shift();
         this.meteors.push({ x: e.x, y, z: e.z, r: e.r, hit: now + e.delay, landed: false });
