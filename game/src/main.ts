@@ -10,7 +10,7 @@ import { BridgeClient } from "./net/bridgeClient";
 import { LiveRouter, type RouteResult } from "./live/router";
 import { loadConfig, UNIT_TYPES } from "./sim/config";
 import { WORLD_SCALE, WorldMap } from "./sim/map";
-import { Sim } from "./sim/world";
+import { Sim, type BossKind } from "./sim/world";
 import { Atmosphere } from "./render/atmosphere";
 import { paintLightPool, parseTimeMode, type PoolLight } from "./render/daycycle";
 import { WeatherRenderer } from "./render/weather";
@@ -120,15 +120,19 @@ for (let i = 0; i < demo; i++) sim.join(`demo${i + 1}`, `Demo${i + 1}`);
 
 // ---------------------------------------------------------------- world events (tests and the milestone system)
 
-/** meteor = Hujan Meteor Dunia, titan = Titan Neraka, elder = Naga Purba, dragon = Naga Dunia. */
-type WorldEvent = "meteor" | "titan" | "elder" | "dragon";
+/**
+ * meteor = Hujan Meteor Dunia, region = this map's own monster (Boss Jempol), or a boss by name:
+ * titan, elder (Naga Purba), bone (Naga Tengkorak), yeti, kraken, treant, worm, dragon (Naga Dunia).
+ */
+type WorldEvent = "meteor" | "region" | BossKind;
 function worldEvent(kind: WorldEvent, by: string | null = null) {
   if (sim.phase === "LOBBY") sim.nextPhase();
   if (kind === "meteor") return sim.worldMeteor(by);
   if (sim.dragon) sim.dragon = null;
-  return sim.summonBoss(kind, by);
+  return sim.summonBoss(kind === "region" ? sim.regionBoss() : kind, by);
 }
-// ?event=meteor|titan|elder fires that event a few seconds into the war (for checking the effects)
+// ?event=meteor|region|titan|bone|yeti|kraken|treant|worm|elder fires that event a few seconds into
+// the war (for checking the effects)
 const eventParam = params.get("event") as WorldEvent | null;
 if (eventParam) {
   let fired = false;

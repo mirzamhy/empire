@@ -4,13 +4,42 @@ import "./hud.css";
 import { SPELL_COLOR, SPELL_ICON, SPELL_LABEL, UNIT_ICON, type UnitBundle, type UnitType } from "../sim/config";
 import { WORLD_H, WORLD_W, type WorldMap } from "../sim/map";
 import { THEME } from "../render/theme";
-import { BOSS_NAME, type BossKind, type Kingdom, type Sim, type SimEvent } from "../sim/world";
+import { BOSS_NAME, LIKE_BOSSES, type BossAct, type BossKind, type Kingdom, type Sim, type SimEvent } from "../sim/world";
 import { describeUnits } from "../live/router";
 
-const BOSS_LOOK: Record<BossKind, { icon: string; color: string; how: string; reward: string }> = {
-  dragon: { icon: "🐉", color: "#ff7a3d", how: "ketik BOSS untuk menyerbu", reward: "" },
-  elder: { icon: "🐲", color: "#ff3b1f", how: "ia memburu kerajaan terkuat · ketik BOSS", reward: "2 Naga + 1 level bergabung ke pasukannya" },
-  titan: { icon: "🗿", color: "#ff8a2a", how: "tap layar = lempar batu! · 90 dtk sebelum ia mengamuk", reward: "2 Golem + 1 level untuk penyerang terbesar" },
+interface BossLook {
+  icon: string;
+  /** main colour (frame, glow) and the bar's gradient from empty to full */
+  color: string;
+  bar: [string, string, string];
+  how: string;
+  reward: string;
+}
+const BOSS_LOOK: Record<BossKind, BossLook> = {
+  dragon: { icon: "🐉", color: "#ff7a3d", bar: ["#ff3d1f", "#ff7a2a", "#ffb02e"], how: "ketik BOSS untuk menyerbu", reward: "" },
+  elder: { icon: "🐲", color: "#ff3b1f", bar: ["#6b0f0f", "#ff3b1f", "#ffb02e"], how: "ia memburu kerajaan terkuat · ketik BOSS", reward: "2 Naga + 1 level bergabung ke pasukannya" },
+  titan: { icon: "🗿", color: "#ff8a2a", bar: ["#3a2a20", "#ff5a14", "#ffd36a"], how: "tap layar = lempar batu! · 90 dtk sebelum ia mengamuk", reward: "2 Golem + 1 level untuk penyerang terbesar" },
+  bone: { icon: "💀", color: "#45f5a8", bar: ["#0b2a1f", "#1fbf7a", "#c8ffe6"], how: "napasnya menyembuhkan dirinya · tap layar = lempar batu!", reward: "12 Skeleton + 2 Necromancer + 1 level" },
+  yeti: { icon: "❄️", color: "#7fdcff", bar: ["#1a3550", "#5ac8ff", "#e8f8ff"], how: "lemparan esnya membekukan pasukan · tap layar = lempar batu!", reward: "6 Halberdier + 2 Shieldbearer + 1 level" },
+  kraken: { icon: "🐙", color: "#38f2d6", bar: ["#24133a", "#7a3ad8", "#38f2d6"], how: "ia menyeret pasukan di pantai · tap layar = lempar batu!", reward: "4 Griffin + 1 level" },
+  treant: { icon: "🌳", color: "#a8ff4a", bar: ["#2c1f15", "#4e7a2a", "#c6ff5a"], how: "akarnya menahan pasukan, di hutan ia pulih · tap layar!", reward: "4 Paladin + 1 level" },
+  worm: { icon: "🪱", color: "#f0b45a", bar: ["#4a3018", "#c49a5e", "#ffd36a"], how: "serang saat ia muncul ke permukaan · tap layar!", reward: "2 Gajah + 1 level" },
+};
+
+/** What a boss move is called on screen: a big toast for the dangerous ones, a ticker line for the rest. */
+const BOSS_MOVE: Partial<Record<BossAct, { text: string; sub: string; big?: boolean }>> = {
+  rampage: { text: "AMUKAN TERAKHIR!", sub: "kastil terkuat dihantam sebelum ia pergi", big: true },
+  spikes: { text: "TOMBAK TULANG!", sub: "duri tulang mencuat di bawah kastil" },
+  wail: { text: "JERITAN ARWAH!", sub: "pasukan di sekitarnya membeku ketakutan", big: true },
+  throw: { text: "BONGKAH ES!", sub: "yang kena membeku" },
+  blizzard: { text: "BADAI SALJU!", sub: "pasukan di dekatnya melambat dan kedinginan", big: true },
+  grab: { text: "DISERET KE LAUT!", sub: "tentakel menyambar pasukan di pantai" },
+  waveCall: { text: "GELOMBANG PASANG!", sub: "dinding air menghantam pantai", big: true },
+  dive: { text: "KRAKEN MENYELAM…", sub: "ia akan muncul di dekat kerajaan terkuat" },
+  roots: { text: "AKAR BELENGGU!", sub: "akar menjalar ke kastil dan menahan pasukan" },
+  bloom: { text: "MEKAR PURBA!", sub: "Treant pulih, spora berduri menyebar", big: true },
+  burrow: { text: "CACING MENGGALI…", sub: "awas, tanah di bawah pasukan bergetar" },
+  erupt: { text: "TELAN!", sub: "Cacing Pasir menyembur dari bawah tanah", big: true },
 };
 
 const el = (tag: string, cls = "", html = "") => {
@@ -35,7 +64,7 @@ export class Hud {
   private live = el("span", "live", "DEMO");
   private board = el("div", "bar board");
   private radar = document.createElement("canvas");
-  private boss = el("div", "boss", `<div class="lbl">🐉 NAGA DUNIA</div><div class="hp"><i></i></div>`);
+  private boss = el("div", "boss", `<div class="lbl">🐉 NAGA DUNIA</div><div class="hp"><i></i><b></b></div><div class="sub"></div><div class="top"></div>`);
   private toasts = el("div", "toasts");
   private ticker = el("div", "ticker");
   private hint = el("div", "hint", "Ketik <b>IKUT</b> untuk punya kerajaan!");
@@ -155,9 +184,18 @@ export class Hud {
         this.boss.querySelector(".lbl")!.textContent = `${b.icon} ${BOSS_NAME[e.kind].toUpperCase()}`;
         break;
       }
-      case "boss":
-        if (e.act === "rampage") this.toast("🗿 AMUKAN TITAN!", "kastil terkuat dihantam sebelum Titan pergi", BOSS_LOOK.titan.color);
+      case "boss": {
+        const mv = BOSS_MOVE[e.act];
+        if (!mv) break;
+        const b = BOSS_LOOK[e.kind];
+        // a move repeated within a few seconds (the Kraken grabs several troops at once) is told once
+        const key = `${e.kind}:${e.act}`;
+        if (s.t - (this.moveSaid.get(key) ?? -99) < 4) break;
+        this.moveSaid.set(key, s.t);
+        if (mv.big) this.toast(`${b.icon} ${mv.text}`, mv.sub, b.color);
+        else this.tick(`${b.icon} ${BOSS_NAME[e.kind]}: ${mv.text} · ${mv.sub}`, b.color);
         break;
+      }
       case "doom": {
         const target = e.target ? s.kingdomById(e.target) : null;
         this.doomUntil = this.sim.t + e.seconds;
@@ -185,21 +223,61 @@ export class Hud {
       this.renderBoard();
       this.renderRadar();
     }
-    const d = s.dragon;
-    this.boss.classList.toggle("show", !!d);
-    if (d) {
-      (this.boss.querySelector("i") as HTMLElement).style.width = `${Math.max(0, (d.hp / d.maxHp) * 100)}%`;
-      const b = BOSS_LOOK[d.kind];
-      const left = d.kind === "titan" ? ` · ${Math.max(0, Math.ceil(d.until - s.t))} dtk` : "";
-      const label = `${b.icon} ${BOSS_NAME[d.kind].toUpperCase()}${left}`;
-      const lbl = this.boss.querySelector(".lbl")!;
-      if (lbl.textContent !== label) lbl.textContent = label;
-      this.boss.dataset.kind = d.kind;
-    }
+    this.renderBoss();
     this.renderDoom();
     this.hint.style.display = s.phase === "RESULT" ? "none" : "";
     this.renderCenter();
     this.renderLabels();
+  }
+
+  private moveSaid = new Map<string, number>();
+  private bossTop = "";
+  /** The boss bar: name, timer, health, what it is doing, and the three kingdoms hurting it most. */
+  private renderBoss() {
+    const s = this.sim;
+    const d = s.dragon;
+    this.boss.classList.toggle("show", !!d);
+    if (!d) return;
+    const b = BOSS_LOOK[d.kind];
+    const pct = Math.max(0, (d.hp / d.maxHp) * 100);
+    (this.boss.querySelector("i") as HTMLElement).style.width = `${pct}%`;
+    const num = this.boss.querySelector(".hp b")!;
+    const pctText = `${Math.ceil(pct)}%`;
+    if (num.textContent !== pctText) num.textContent = pctText;
+    const timed = LIKE_BOSSES.includes(d.kind);
+    const secs = Math.max(0, Math.ceil(d.until - s.t));
+    const left = timed ? ` · ⏳${secs}` : "";
+    const label = `${b.icon} ${BOSS_NAME[d.kind].toUpperCase()}${left}`;
+    const lbl = this.boss.querySelector(".lbl")!;
+    if (lbl.textContent !== label) lbl.textContent = label;
+    if (this.boss.dataset.kind !== d.kind) {
+      this.boss.dataset.kind = d.kind;
+      this.boss.style.setProperty("--bc", b.color);
+      this.boss.style.setProperty("--b1", b.bar[0]);
+      this.boss.style.setProperty("--b2", b.bar[1]);
+      this.boss.style.setProperty("--b3", b.bar[2]);
+    }
+    this.boss.classList.toggle("urgent", timed && secs <= 15);
+    this.boss.classList.toggle("hidden", d.hidden);
+    // what it is doing right now, or how to fight it
+    const sub = d.hidden
+      ? d.kind === "kraken" ? "🌊 menyelam… pasukan tak bisa menyerang" : d.mode === 2 ? "⚠️ tanah bergetar… menjauh!" : "🏜️ di bawah pasir… menuju kerumunan"
+      : d.zone && d.zone.until > s.t
+        ? d.kind === "yeti" ? "🌨️ badai salju · pasukan melambat" : d.kind === "treant" ? "🌸 spora berduri · Treant pulih" : "🌪️ badai pasir · serang sekarang!"
+        : b.how;
+    const subEl = this.boss.querySelector(".sub")!;
+    if (subEl.textContent !== sub) subEl.textContent = sub;
+    // the three biggest hitters
+    const top = [...d.damage.entries()]
+      .map(([kid, dmg]) => ({ k: s.kingdomById(kid), dmg }))
+      .filter((x) => x.k && x.k.alive)
+      .sort((a, b2) => b2.dmg - a.dmg)
+      .slice(0, 3);
+    const html = top.map((x, i) => `<span style="--kc:${x.k!.color}">${["🥇", "🥈", "🥉"][i]} ${esc(x.k!.name)} <em>${Math.round(x.dmg)}</em></span>`).join("");
+    if (html !== this.bossTop) {
+      this.bossTop = html;
+      this.boss.querySelector(".top")!.innerHTML = html;
+    }
   }
 
   private doomUntil = -1;
