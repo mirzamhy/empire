@@ -24,6 +24,7 @@ import { buildYeti } from "./yeti";
 import { buildTreant } from "./treant";
 import { buildKraken, KRAKEN_ARMS, KRAKEN_SEGS } from "./kraken";
 import { buildWorm, WORM_SEGS } from "./worm";
+import { mergeParts } from "./merge";
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
@@ -105,6 +106,8 @@ export class BossRenderer {
     const make = (model: BossModel, scale: number): Look => {
       model.root.scale.setScalar(scale);
       model.root.visible = false;
+      // the plain dragon is a unit model whose geometry may be shared; the boss models are their own
+      if (model !== dragonLook) mergeParts(model.root);
       // turn first, then pitch and roll around the boss's own axes (dives, falls)
       model.root.rotation.order = "YXZ";
       model.root.traverse((o) => {
