@@ -58,6 +58,8 @@ export interface MapDef {
   clouds: boolean;
   /** layered, shaded trees with forest undergrowth instead of the plain ones */
   detailedTrees: boolean;
+  /** the regional monster of the like milestone (Boss Jempol) on this map */
+  boss: "treant" | "yeti" | "kraken" | "worm";
 }
 
 const RIVERS: RiverDef[] = [
@@ -151,11 +153,11 @@ const LANDMARKS_5: LandmarkDef[] = [
 ];
 
 export const MAPS: Record<number, MapDef> = {
-  1: { id: 1, name: "Benua Klasik", w: W1, h: H1, rows: ROWS1, terrain: "classic", theme: "bright", rivers: [], landmarks: [], life: false, clouds: false, detailedTrees: false },
-  2: { id: 2, name: "Hutan Gelap", w: W2, h: H2, rows: ROWS2, terrain: "wild", theme: "dark", rivers: [], landmarks: [], life: false, clouds: false, detailedTrees: false },
-  3: { id: 3, name: "Hutan Sungai", w: W2, h: H2, rows: ROWS2, terrain: "wild", theme: "dark", rivers: RIVERS, landmarks: LANDMARKS, life: true, clouds: false, detailedTrees: true },
-  4: { id: 4, name: "Tiga Alam", w: W4, h: H4, rows: ROWS4, terrain: "alpine", theme: "vivid", rivers: RIVERS_4, landmarks: LANDMARKS_4, life: true, clouds: true, detailedTrees: true },
-  5: { id: 5, name: "Teluk Naga", w: W5, h: H5, rows: ROWS5, terrain: "alpine", theme: "vivid", rivers: RIVERS_5, landmarks: LANDMARKS_5, life: true, clouds: true, detailedTrees: true },
+  1: { id: 1, name: "Benua Klasik", w: W1, h: H1, rows: ROWS1, terrain: "classic", theme: "bright", rivers: [], landmarks: [], life: false, clouds: false, detailedTrees: false, boss: "worm" },
+  2: { id: 2, name: "Hutan Gelap", w: W2, h: H2, rows: ROWS2, terrain: "wild", theme: "dark", rivers: [], landmarks: [], life: false, clouds: false, detailedTrees: false, boss: "treant" },
+  3: { id: 3, name: "Hutan Sungai", w: W2, h: H2, rows: ROWS2, terrain: "wild", theme: "dark", rivers: RIVERS, landmarks: LANDMARKS, life: true, clouds: false, detailedTrees: true, boss: "treant" },
+  4: { id: 4, name: "Tiga Alam", w: W4, h: H4, rows: ROWS4, terrain: "alpine", theme: "vivid", rivers: RIVERS_4, landmarks: LANDMARKS_4, life: true, clouds: true, detailedTrees: true, boss: "yeti" },
+  5: { id: 5, name: "Teluk Naga", w: W5, h: H5, rows: ROWS5, terrain: "alpine", theme: "vivid", rivers: RIVERS_5, landmarks: LANDMARKS_5, life: true, clouds: true, detailedTrees: true, boss: "kraken" },
 };
 export const DEFAULT_MAP = 5;
 

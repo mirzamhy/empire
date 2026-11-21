@@ -1,7 +1,8 @@
 // EMPIRE simulation: kingdoms, units, combat, territory, dragon, rounds.
 // Pure TS and deterministic for a given seed and input order. Rendering reads its state and events.
 import { BANNER_COLORS, UNIT_TYPES, type GameConfig, type SpellId, type UnitBundle, type UnitType } from "./config";
-import { CELL, GRID_W, WORLD_H, WORLD_W, type WorldMap } from "./map";
+import { CELL, GRID_H, GRID_W, WORLD_H, WORLD_W, type Biome, type WorldMap } from "./map";
+import type { LandmarkKind } from "./maps";
 import { Rng } from "./rng";
 
 export type Phase = "LOBBY" | "WAR" | "FINAL" | "RESULT";
@@ -118,9 +119,34 @@ const VILLAGE_NAMES = [
   "Telagamas", "Padangrumput", "Sukaraja", "Mandalasari",
 ];
 
-/** The world boss: the World Dragon of every round, or a milestone boss (Naga Purba, the Titan). */
-export type BossKind = "dragon" | "elder" | "titan";
-export const BOSS_NAME: Record<BossKind, string> = { dragon: "Naga Dunia", elder: "Naga Purba", titan: "Titan Neraka" };
+/**
+ * The world boss: the World Dragon of every round, or a milestone boss. Only one stands at a time.
+ *   elder   Naga Purba: flies to the leader, lays lines of hellfire
+ *   titan   Titan Neraka: the universal like boss, smashes and shakes the ground
+ *   bone    Naga Tengkorak: rises from the dragon bones, soul breath that heals it, bone spikes, a wail that stuns
+ *   yeti    Raksasa Es: throws ice, freezes what it hits, calls a blizzard
+ *   kraken  Kraken: from the sea at the shore by the leader, tentacles, grabs troops, sends waves, dives away
+ *   treant  Treant Purba: walks out of the great tree, roots that hold troops, heals in the forest
+ *   worm    Cacing Pasir: tunnels under the sand, erupts under crowds and swallows them, spits sand
+ */
+export type BossKind = "dragon" | "elder" | "titan" | "bone" | "yeti" | "kraken" | "treant" | "worm";
+export const BOSS_NAME: Record<BossKind, string> = {
+  dragon: "Naga Dunia", elder: "Naga Purba", titan: "Titan Neraka", bone: "Naga Tengkorak",
+  yeti: "Raksasa Es", kraken: "Kraken", treant: "Treant Purba", worm: "Cacing Pasir",
+};
+/** Milestone bosses: likes become shots at them, and they leave in a rampage when their time is up. */
+export const LIKE_BOSSES: readonly BossKind[] = ["titan", "bone", "yeti", "kraken", "treant", "worm"];
+
+/** Config of a timed milestone boss: the parts every one of them has. */
+interface TimedBossCfg {
+  hpMultiplier: number;
+  seconds: number;
+  radius: number;
+  rampageCastleDamage: number;
+  rewardUnits: Record<string, number>;
+  rewardLevels: number;
+  retargetSeconds?: number;
+}
 
 export interface Dragon {
   kind: BossKind;
@@ -134,23 +160,32 @@ export interface Dragon {
   attackAt: number;
   /** body radius: melee troops strike from this far */
   radius: number;
-  /** where it is heading (Naga Purba and the Titan move), and the kingdom it hunts */
+  /** where it is heading (the moving bosses), and the kingdom it hunts */
   tx: number;
   tz: number;
   prey: number;
   retargetAt: number;
-  /** seconds to its special attack (inferno, quake) */
+  /** seconds to its special attacks (inferno, quake, bone spikes, ice throw, roots, dive...) */
   special: number;
-  /** the Titan leaves at this time if it still stands */
+  special2: number;
+  special3: number;
+  /** a timed boss leaves at this time if it still stands */
   until: number;
   /** a blow being wound up: it lands at `at` on (x, z) */
-  windup: { act: "slam" | "quake"; at: number; x: number; z: number } | null;
-  /** likes per viewer waiting to become a shot (Titan) */
+  windup: { act: "slam" | "quake" | "tentacle" | "erupt"; at: number; x: number; z: number } | null;
+  /** likes per viewer waiting to become a shot (milestone bosses) */
   likes: Map<string, number>;
   lastHit: number;
+  /** under the ground or the sea: troops cannot hit it (the Kraken diving, the worm tunnelling) */
+  hidden: boolean;
+  /** state of the bosses that change form: Kraken 0 up / 1 diving, worm 0 surfaced / 1 tunnelling / 2 erupting */
+  mode: number;
+  modeUntil: number;
+  /** an area around the boss that hurts and slows troops (blizzard, spores, sandstorm) */
+  zone: { r: number; until: number; dps: number; chill: boolean } | null;
 }
 
-/** A meteor, a mother meteor or a burst of hellfire on its way; kid 0 = nobody's (world events). */
+/** A meteor, a mother meteor or another world blow on its way; kid 0 = nobody's (world events). */
 interface Strike {
   kid: number;
   x: number;
@@ -159,9 +194,16 @@ interface Strike {
   r?: number;
   dmg?: number;
   castle?: number;
+  style?: StrikeStyle;
+  /** troops caught are held in place this long (ice, roots) */
+  stun?: number;
 }
 
-export type StrikeStyle = "meteor" | "mother" | "inferno";
+export type StrikeStyle = "meteor" | "mother" | "inferno" | "bone" | "ice" | "root" | "wave" | "sand";
+export type BossAct =
+  | "windup" | "slam" | "quakeWindup" | "quake" | "rampage" | "roar" | "inferno"
+  | "spikes" | "wail" | "throw" | "blizzard" | "tentacleWindup" | "grab" | "waveCall" | "dive" | "surface"
+  | "roots" | "bloom" | "burrow" | "eruptWindup" | "erupt" | "spit";
 
 export type SimEvent =
   | { k: "join"; kid: number }
@@ -175,8 +217,8 @@ export type SimEvent =
   | { k: "death"; x: number; z: number; kid: number; type: UnitType; id: number; heading: number }
   | { k: "dragon"; state: "spawn" | "dead" | "leave"; by: number | null; kind: BossKind; x: number; z: number }
   /** a boss move: a blow wound up or landing, a quake, the Titan's last rampage, a roar */
-  | { k: "boss"; kind: BossKind; act: "windup" | "slam" | "quakeWindup" | "quake" | "rampage" | "roar" | "inferno"; x: number; z: number; r: number }
-  /** a viewer's like hits the boss (the Titan): from (fromX, fromZ), credited to kid (0 = no kingdom) */
+  | { k: "boss"; kind: BossKind; act: BossAct; x: number; z: number; r: number; fromX?: number; fromZ?: number }
+  /** a viewer's like hits a milestone boss: from (fromX, fromZ), credited to kid (0 = no kingdom) */
   | { k: "likeShot"; fromX: number; fromZ: number; x: number; z: number; dmg: number; kid: number; name: string }
   /** Hujan Meteor Dunia: warning, then `seconds` of meteors and the mother meteor on (x, z) */
   | { k: "doom"; warn: number; seconds: number; x: number; z: number; target: number | null }
@@ -187,7 +229,7 @@ export type SimEvent =
   | { k: "spell"; spell: SpellId; kid: number; x: number; z: number; r: number; seconds: number; from: string }
   /** a meteor is on its way and lands after `delay` seconds */
   | { k: "strike"; x: number; z: number; r: number; delay: number; style?: StrikeStyle }
-  | { k: "impact"; x: number; z: number; r: number; dmg: number }
+  | { k: "impact"; x: number; z: number; r: number; dmg: number; style?: StrikeStyle }
   /** lightning: first point is struck from the sky, the rest are jumps between units */
   | { k: "chain"; kid: number; points: { x: number; z: number; dmg: number }[] }
   | { k: "phase"; phase: Phase }
@@ -248,6 +290,9 @@ export class Sim {
   private colorCursor = 0;
   zones: Zone[] = [];
   private strikes: Strike[] = [];
+  /** navigation field toward the moving boss (land cells around it), rebuilt as it moves */
+  private bossField: Uint16Array | null = null;
+  private bossFieldAt = { x: 0, z: 0, t: -99 };
   /** Hujan Meteor Dunia runs until this time */
   doomUntil = -1;
   private spellQueue: { key: string; spell: SpellId; from: string }[] = [];
@@ -499,39 +544,187 @@ export class Sim {
   }
 
   /**
-   * Bring a world boss to the altar. Only one boss at a time: a second one is refused (the World
-   * Dragon of the round simply comes later).
+   * Bring a world boss into the world. Only one boss at a time: a second one is refused (the World
+   * Dragon of the round simply comes later). The World Dragon, Naga Purba and the Titan come to the
+   * altar; the regional bosses come out of their landmark, and the Kraken out of the sea by the leader.
    */
   summonBoss(kind: BossKind, byKey: string | null = null) {
     if (this.dragon || this.phase === "LOBBY" || this.phase === "RESULT") return false;
     const dc = this.cfg.dragon;
     const by = byKey ? this.kingdomByKey(byKey) : null;
-    const mult = kind === "elder" ? this.cfg.elder.hpMultiplier : kind === "titan" ? this.cfg.titan.hpMultiplier : 1;
+    const timed = this.timedCfg(kind);
+    const mult = kind === "elder" ? this.cfg.elder.hpMultiplier : timed ? timed.hpMultiplier : 1;
     const hp = Math.round((dc.hpBase + dc.hpPerKingdom * this.alive.length) * mult);
-    const { x, z } = this.map.altar;
+    const { x, z } = this.bossSpawn(kind);
     this.dragon = {
       kind, hp, maxHp: hp, x, z, cd: kind === "dragon" ? 2 : 4, summonedBy: by?.id ?? null, damage: new Map(), attackAt: -9,
-      radius: kind === "titan" ? this.cfg.titan.radius : 3, tx: x, tz: z, prey: 0, retargetAt: this.t + 3,
-      special: kind === "elder" ? this.cfg.elder.infernoEvery : this.cfg.titan.quakeEvery,
-      until: kind === "titan" ? this.t + this.cfg.titan.seconds : Infinity, windup: null, likes: new Map(), lastHit: 0,
+      radius: timed ? timed.radius : 3, tx: x, tz: z, prey: 0, retargetAt: this.t + 3,
+      special: this.firstSpecial(kind), special2: 6, special3: 12,
+      until: timed ? this.t + timed.seconds : Infinity, windup: null, likes: new Map(), lastHit: 0,
+      hidden: false, mode: 0, modeUntil: kind === "worm" ? this.t + this.cfg.worm.surfaceSeconds : this.t, zone: null,
     };
+    this.bossField = null;
     if (kind === "dragon") this.dragonSpawnedThisRound = true;
     this.emit({ k: "dragon", state: "spawn", by: by?.id ?? null, kind, x, z });
     if (kind !== "dragon") this.emit({ k: "boss", kind, act: "roar", x, z, r: 0 });
     return true;
   }
 
-  /** Likes become shots at the Titan: every `likesPerShot` likes of one viewer is one stone. */
+  /** The boss this map calls at the like milestone (its regional monster). */
+  regionBoss(): BossKind {
+    return this.map.def.boss;
+  }
+
+  private timedCfg(kind: BossKind): TimedBossCfg | null {
+    switch (kind) {
+      case "titan": return this.cfg.titan;
+      case "bone": return this.cfg.boneDragon;
+      case "yeti": return this.cfg.yeti;
+      case "kraken": return this.cfg.kraken;
+      case "treant": return this.cfg.treant;
+      case "worm": return this.cfg.worm;
+      default: return null;
+    }
+  }
+
+  private firstSpecial(kind: BossKind) {
+    switch (kind) {
+      case "elder": return this.cfg.elder.infernoEvery;
+      case "titan": return this.cfg.titan.quakeEvery;
+      case "bone": return 6;
+      case "yeti": return 4;
+      case "kraken": return this.cfg.kraken.diveEvery;
+      case "treant": return 5;
+      default: return 8;
+    }
+  }
+
+  /** Where a boss appears: its landmark (just outside it), the shore by the leader, or the altar. */
+  private bossSpawn(kind: BossKind): { x: number; z: number } {
+    const lm = (k: LandmarkKind) => this.map.landmarks.find((l) => l.kind === k) ?? null;
+    const beside = (l: { x: number; z: number; r: number }, gap: number) => {
+      // step from the landmark toward the altar until the ground can be walked
+      const dx = this.map.altar.x - l.x;
+      const dz = this.map.altar.z - l.z;
+      const d = Math.hypot(dx, dz) || 1;
+      for (let s = l.r + gap; s < l.r + gap + 40; s += 2) {
+        const x = l.x + (dx / d) * s;
+        const z = l.z + (dz / d) * s;
+        if (this.map.walkable(this.map.cellAt(x, z))) return { x, z };
+      }
+      return { x: this.map.altar.x, z: this.map.altar.z };
+    };
+    /** no landmark on this map: the walkable cell of that biome nearest the altar */
+    const biome = (b: Biome) => {
+      let best = -1;
+      let bd = Infinity;
+      const m = this.map;
+      for (let i = 0; i < m.biome.length; i++) {
+        if (m.biome[i] !== b || m.component[i] !== m.mainComponent) continue;
+        const c = m.cellCenter(i);
+        const d = Math.hypot(c.x - m.altar.x, c.z - m.altar.z);
+        if (d < bd) {
+          bd = d;
+          best = i;
+        }
+      }
+      return best >= 0 ? m.cellCenter(best) : { ...m.altar };
+    };
+    switch (kind) {
+      case "bone": {
+        // it rises out of the bones themselves
+        const l = lm("dragonBones");
+        return l ? { x: l.x, z: l.z } : { ...this.map.altar };
+      }
+      case "yeti": {
+        const l = lm("iceSpire");
+        return l ? beside(l, this.cfg.yeti.radius + 2) : biome("snow");
+      }
+      case "treant": {
+        const l = lm("greatTree");
+        return l ? beside(l, this.cfg.treant.radius + 1) : biome("forest");
+      }
+      case "worm": {
+        const l = lm("sandArch");
+        return l ? beside(l, this.cfg.worm.radius + 2) : biome("desert");
+      }
+      case "kraken": {
+        const lead = this.leaderboard().find((k) => !this.shielded(k)) ?? this.leaderboard()[0] ?? null;
+        return this.shoreNear(lead?.x ?? this.map.altar.x, lead?.z ?? this.map.altar.z) ?? { ...this.map.altar };
+      }
+      default:
+        return { ...this.map.altar };
+    }
+  }
+
+  private shoreCells: number[] | null = null;
+  /**
+   * A spot in the sea, a few metres off the main continent's coast, as close as possible to (x, z):
+   * where the Kraken surfaces. Troops on the beach can reach it.
+   */
+  private shoreNear(x: number, z: number): { x: number; z: number } | null {
+    if (!this.shoreCells) {
+      const m = this.map;
+      const list: number[] = [];
+      // clear water a body's width around it, the continent's beach within reach of melee troops,
+      // and open sea on the whole (not a narrow inlet between hills)
+      const clear = Math.max(1, Math.round(this.cfg.kraken.shoreDistance / CELL));
+      const reach = clear + 2;
+      const open = clear + 4;
+      for (let i = 0; i < m.biome.length; i++) {
+        if (m.walkable(i)) continue;
+        const cx = i % GRID_W;
+        const cz = (i / GRID_W) | 0;
+        let land = false;
+        let near = false;
+        let water = 0;
+        let all = 0;
+        for (let dz = -open; dz <= open && !near; dz++)
+          for (let dx = -open; dx <= open; dx++) {
+            const x2 = cx + dx;
+            const z2 = cz + dz;
+            if (x2 < 0 || z2 < 0 || x2 >= GRID_W || z2 >= GRID_H) continue;
+            const j = z2 * GRID_W + x2;
+            const r = Math.max(Math.abs(dx), Math.abs(dz));
+            all++;
+            if (!m.walkable(j)) {
+              water++;
+              continue;
+            }
+            if (r <= clear) {
+              near = true;
+              break;
+            }
+            if (r <= reach && m.component[j] === m.mainComponent) land = true;
+          }
+        if (land && !near && water >= all * 0.62) list.push(i);
+      }
+      this.shoreCells = list;
+    }
+    let best = -1;
+    let bd = Infinity;
+    for (const i of this.shoreCells) {
+      const c = this.map.cellCenter(i);
+      const d = Math.hypot(c.x - x, c.z - z);
+      if (d < bd) {
+        bd = d;
+        best = i;
+      }
+    }
+    return best >= 0 ? this.map.cellCenter(best) : null;
+  }
+
+  /** Likes become shots at a milestone boss: every `likesPerShot` likes of one viewer is one stone. */
   bossLike(key: string, name: string, count: number) {
     const d = this.dragon;
-    if (!d || d.kind !== "titan" || (this.phase !== "WAR" && this.phase !== "FINAL")) return 0;
+    if (!d || !LIKE_BOSSES.includes(d.kind) || (this.phase !== "WAR" && this.phase !== "FINAL")) return 0;
     const tc = this.cfg.titan;
     const acc = (d.likes.get(key) ?? 0) + count;
     const shots = Math.min(tc.maxShotsPerEvent, Math.floor(acc / tc.likesPerShot));
     d.likes.set(key, acc - shots * tc.likesPerShot);
     const k = this.kingdomByKey(key);
     for (let i = 0; i < shots && this.dragon; i++) {
-      // from the viewer's castle, or from the crowd on the hills around the Titan
+      // from the viewer's castle, or from the crowd on the hills around the boss
       const a = this.rng.next() * Math.PI * 2;
       const fromX = k ? k.x : d.x + Math.cos(a) * 26;
       const fromZ = k ? k.z : d.z + Math.sin(a) * 26;
@@ -683,6 +876,7 @@ export class Sim {
     this.kingdoms = [];
     this.units = [];
     this.dragon = null;
+    this.bossField = null;
     this.dragonSpawnedThisRound = false;
     this.zones = [];
     this.strikes = [];
@@ -1007,7 +1201,7 @@ export class Sim {
     u.tId = 0;
     if (this.shielded(k)) return;
     const dr = this.dragon;
-    if (dr) {
+    if (dr && !dr.hidden) {
       const d = Math.hypot(dr.x - u.x, dr.z - u.z);
       if (k.order?.kind === "boss" || d < this.cfg.dragon.pullRange) {
         u.tKind = "dragon";
@@ -1222,7 +1416,7 @@ export class Sim {
           }
         }
         const tooClose = !!st.minRange && dist < st.minRange && !!(tUnit || tCastle);
-        if (war && !tooClose && u.atkCd <= 0 && (tUnit || tCastle || (u.tKind === "dragon" && this.dragon))) {
+        if (war && !tooClose && u.atkCd <= 0 && (tUnit || tCastle || (u.tKind === "dragon" && this.bossTargetable()))) {
           u.atkCd = this.cfg.units.attackCooldown * (0.9 + this.rng.next() * 0.2);
           u.attackAt = this.t;
           let dmg = u.dmg * (0.9 + this.rng.next() * 0.2);
@@ -1268,7 +1462,7 @@ export class Sim {
       const field = tCastle
         ? tCastle.field
         : u.tKind === "dragon"
-          ? this.altarField
+          ? (this.bossField ?? this.altarField)
           : u.tKind === "home"
             ? k.field
             : u.tKind === "village" || u.tKind === "build"
@@ -1437,7 +1631,10 @@ export class Sim {
         this.strikes = this.strikes.filter((s) => s.at > this.t);
         for (const s of due) {
           if (s.kid) this.meteorImpact(s.kid, s.x, s.z);
-          else this.worldImpact(s.x, s.z, s.r ?? 4, s.dmg ?? 100, s.castle ?? 0);
+          else {
+            this.worldImpact(s.x, s.z, s.r ?? 4, s.dmg ?? 100, s.castle ?? 0, s.style);
+            if (s.stun) this.hold(s.x, s.z, s.r ?? 4, s.stun);
+          }
         }
       }
     }
@@ -1635,9 +1832,9 @@ export class Sim {
     return total;
   }
 
-  private worldImpact(x: number, z: number, r: number, dmg: number, castleDmg: number) {
+  private worldImpact(x: number, z: number, r: number, dmg: number, castleDmg: number, style?: StrikeStyle) {
     const total = this.blast(x, z, r, dmg, castleDmg);
-    this.emit({ k: "impact", x, z, r, dmg: total });
+    this.emit({ k: "impact", x, z, r, dmg: total, style });
   }
 
   // ---------------------------------------------------------------- dragon and the other bosses
@@ -1645,7 +1842,28 @@ export class Sim {
   private updateDragon(dt: number) {
     const d = this.dragon;
     if (!d || (this.phase !== "WAR" && this.phase !== "FINAL")) return;
-    if (d.kind === "titan") return this.updateTitan(d, dt);
+    this.refreshBossField(d);
+    const timed = this.timedCfg(d.kind);
+    if (timed && this.t >= d.until) return this.bossRampage(d, timed);
+    if (d.zone) this.tickBossZone(d, dt);
+    if (d.windup) {
+      // the regional bosses keep counting to their next special while a blow is wound up
+      if (d.kind !== "titan") {
+        d.special -= dt;
+        d.special2 -= dt;
+        d.special3 -= dt;
+      }
+      if (this.t >= d.windup.at) this.landWindup(d);
+      return;
+    }
+    switch (d.kind) {
+      case "titan": return this.updateTitan(d, dt);
+      case "bone": return this.updateBone(d, dt);
+      case "yeti": return this.updateYeti(d, dt);
+      case "kraken": return this.updateKraken(d, dt);
+      case "treant": return this.updateTreant(d, dt);
+      case "worm": return this.updateWorm(d, dt);
+    }
     if (d.kind === "elder") this.updateElder(d, dt);
     d.cd -= dt;
     if (d.cd > 0) return;
@@ -1683,23 +1901,264 @@ export class Sim {
     });
   }
 
+  /** Can troops strike the boss right now (not under the sea or the sand)? */
+  bossTargetable() {
+    return !!this.dragon && !this.dragon.hidden;
+  }
+
+  /**
+   * Rebuild the way to the boss when it has moved: troops walk the field toward the land around it
+   * (for the Kraken, the beach in front of it) instead of the altar's.
+   */
+  private refreshBossField(d: Dragon) {
+    const f = this.bossFieldAt;
+    if (this.bossField && (Math.hypot(d.x - f.x, d.z - f.z) < 6 || this.t - f.t < 1.5)) return;
+    if (!this.bossField && this.t - f.t < 0.2) return;
+    f.x = d.x;
+    f.z = d.z;
+    f.t = this.t;
+    const reach = d.radius + 3;
+    const m = this.map;
+    const cx = Math.floor(d.x / CELL + GRID_W / 2);
+    const cz = Math.floor(d.z / CELL + GRID_H / 2);
+    const span = Math.ceil(reach / CELL) + 1;
+    const src = new Set<number>();
+    for (let z = cz - span; z <= cz + span; z++)
+      for (let x = cx - span; x <= cx + span; x++) {
+        if (x < 0 || z < 0 || x >= GRID_W || z >= GRID_H) continue;
+        const i = z * GRID_W + x;
+        const c = m.cellCenter(i);
+        if (m.walkable(i) && Math.hypot(c.x - d.x, c.z - d.z) <= reach) src.add(i);
+      }
+    this.bossField = src.size ? m.bfs((i) => src.has(i), (i) => m.walkable(i)) : null;
+  }
+
+  /** Time is up: one last blow on the leader's castle, then the boss leaves the world. */
+  private bossRampage(d: Dragon, c: TimedBossCfg) {
+    const lead = this.leaderboard().find((k) => !this.shielded(k));
+    if (lead) {
+      const r = d.kind === "titan" ? this.cfg.titan.slamRadius * 1.6 : 8;
+      this.emit({ k: "boss", kind: d.kind, act: "rampage", x: lead.x, z: lead.z, r, fromX: d.x, fromZ: d.z });
+      this.blast(lead.x, lead.z, r, this.cfg.titan.slamDamage * 2, c.rampageCastleDamage);
+    }
+    this.dragon = null;
+    this.bossField = null;
+    this.emit({ k: "dragon", state: "leave", by: null, kind: d.kind, x: d.x, z: d.z });
+  }
+
+  /** The boss's own area (blizzard, spores, sandstorm) hurts and slows troops twice a second. */
+  private zoneAcc = 0;
+  private tickBossZone(d: Dragon, dt: number) {
+    const z = d.zone!;
+    if (this.t >= z.until) {
+      d.zone = null;
+      return;
+    }
+    this.zoneAcc += dt;
+    if (this.zoneAcc < 0.5) return;
+    const span = this.zoneAcc;
+    this.zoneAcc = 0;
+    this.forNear(d.x, d.z, z.r, (o) => {
+      if (Math.hypot(o.x - d.x, o.z - d.z) > z.r) return;
+      const k = this.kingdomById(o.kid);
+      if (k && this.shielded(k)) return;
+      if (z.chill) o.chillUntil = this.t + 1.2;
+      this.hurt(o, z.dps * span);
+    });
+  }
+
+  /** Hold every troop in a circle in place (ice, roots, a wail). */
+  private hold(x: number, z: number, r: number, seconds: number) {
+    this.forNear(x, z, r, (o) => {
+      if (!o.alive || Math.hypot(o.x - x, o.z - z) > r) return;
+      const k = this.kingdomById(o.kid);
+      if (k && this.shielded(k)) return;
+      o.stunUntil = Math.max(o.stunUntil, this.t + seconds);
+      o.chillUntil = Math.max(o.chillUntil, this.t + seconds + 1);
+    });
+  }
+
+  /** A blow from the boss on its way: it lands after `delay` seconds as a strike of its own style. */
+  private bossStrike(x: number, z: number, delay: number, r: number, dmg: number, castle: number, style: StrikeStyle, stun = 0) {
+    const at = this.t + delay;
+    this.strikes.push({ kid: 0, x, z, at, r, dmg, castle, style, stun });
+    this.emit({ k: "strike", x, z, r, delay, style });
+  }
+
+  /** Troops near the boss that it may hit: nearest within `range`, and how many stand within `crowdR`. */
+  private bossSurroundings(d: Dragon, range: number, crowdR: number) {
+    let crowd = 0;
+    let near: Unit | null = null;
+    let nd = range;
+    this.forNear(d.x, d.z, Math.max(range, crowdR), (o) => {
+      const k = this.kingdomById(o.kid);
+      if (k && this.shielded(k)) return;
+      const dist = Math.hypot(o.x - d.x, o.z - d.z);
+      if (dist <= crowdR) crowd++;
+      if (dist < nd) {
+        nd = dist;
+        near = o;
+      }
+    });
+    return { crowd, near: near as Unit | null };
+  }
+
+  /** The thickest knot of troops within `range` of (x, z): where a thrown blow does the most harm. */
+  private densest(x: number, z: number, range: number, r = 4): Unit | null {
+    let best: Unit | null = null;
+    let bn = 0;
+    this.forNear(x, z, range, (o) => {
+      if (Math.hypot(o.x - x, o.z - z) > range) return;
+      const k = this.kingdomById(o.kid);
+      if (k && this.shielded(k)) return;
+      let n = 0;
+      this.forNear(o.x, o.z, r, (p) => {
+        if (Math.hypot(p.x - o.x, p.z - o.z) <= r) n++;
+      });
+      if (n > bn) {
+        bn = n;
+        best = o;
+      }
+    });
+    return best;
+  }
+
+  /** A walking boss's blow: wind up toward the target, a ring on the ground where it will land. */
+  private bossWindup(d: Dragon, target: { x: number; z: number }, range: number, seconds: number, r: number, act: "slam" | "tentacle" = "slam") {
+    const dist = Math.hypot(target.x - d.x, target.z - d.z) || 1;
+    const reach = Math.min(dist, range);
+    const x = d.x + ((target.x - d.x) / dist) * reach;
+    const z = d.z + ((target.z - d.z) / dist) * reach;
+    d.tx = target.x;
+    d.tz = target.z;
+    d.windup = { act, at: this.t + seconds, x, z };
+    this.emit({ k: "boss", kind: d.kind, act: act === "tentacle" ? "tentacleWindup" : "windup", x, z, r, fromX: d.x, fromZ: d.z });
+  }
+
+  /** A wound-up blow lands. */
+  private landWindup(d: Dragon) {
+    const w = d.windup!;
+    d.windup = null;
+    d.attackAt = this.t;
+    switch (d.kind) {
+      case "titan": {
+        const tc = this.cfg.titan;
+        if (w.act === "slam") {
+          this.emit({ k: "boss", kind: "titan", act: "slam", x: w.x, z: w.z, r: tc.slamRadius });
+          this.blast(w.x, w.z, tc.slamRadius, tc.slamDamage, tc.castleDamage);
+        } else {
+          this.emit({ k: "boss", kind: "titan", act: "quake", x: d.x, z: d.z, r: tc.quakeRadius });
+          this.blast(d.x, d.z, tc.quakeRadius, tc.quakeDamage, 0);
+        }
+        return;
+      }
+      case "yeti": {
+        // the fists come down in a burst of ice: what survives is frozen solid
+        const c = this.cfg.yeti;
+        this.emit({ k: "boss", kind: "yeti", act: "slam", x: w.x, z: w.z, r: c.slamRadius, fromX: d.x, fromZ: d.z });
+        this.blast(w.x, w.z, c.slamRadius, c.slamDamage, c.castleDamage);
+        this.hold(w.x, w.z, c.slamRadius, c.freezeSeconds);
+        return;
+      }
+      case "treant": {
+        const c = this.cfg.treant;
+        this.emit({ k: "boss", kind: "treant", act: "slam", x: w.x, z: w.z, r: c.slamRadius, fromX: d.x, fromZ: d.z });
+        this.blast(w.x, w.z, c.slamRadius, c.slamDamage, c.castleDamage);
+        return;
+      }
+      case "kraken": {
+        const c = this.cfg.kraken;
+        this.emit({ k: "boss", kind: "kraken", act: "slam", x: w.x, z: w.z, r: c.slamRadius, fromX: d.x, fromZ: d.z });
+        this.blast(w.x, w.z, c.slamRadius, c.slamDamage, c.castleDamage);
+        return;
+      }
+    }
+  }
+
   /** The kingdom a moving boss goes after: the leader that is not shielded. */
   private bossPrey(d: Dragon) {
     if (this.t < d.retargetAt && this.kingdomById(d.prey)?.alive) return this.kingdomById(d.prey);
     const lead = this.leaderboard().find((k) => !this.shielded(k)) ?? null;
     d.prey = lead?.id ?? 0;
-    d.retargetAt = this.t + (d.kind === "elder" ? this.cfg.elder.retargetSeconds : this.cfg.titan.retargetSeconds);
+    const every = d.kind === "elder" ? this.cfg.elder.retargetSeconds : (this.timedCfg(d.kind)?.retargetSeconds ?? this.cfg.titan.retargetSeconds);
+    d.retargetAt = this.t + every;
     return lead;
   }
 
-  private moveBoss(d: Dragon, tx: number, tz: number, speed: number, stopAt: number, dt: number) {
+  /**
+   * A walking boss heads for its prey's castle along the castle's own navigation field (the way
+   * troops go), so it walks round lakes and bays instead of standing at the water's edge.
+   */
+  private walkBoss(d: Dragon, prey: Kingdom, speed: number, stopAt: number, dt: number) {
+    const direct = Math.hypot(prey.x - d.x, prey.z - d.z);
+    if (direct <= stopAt) return false;
+    let tx = prey.x;
+    let tz = prey.z;
+    if (direct > 12) {
+      const f = prey.field;
+      const c = this.map.cellAt(d.x, d.z);
+      // look a few cells down the field so the walk is smooth and not cell by cell
+      let cur = c;
+      for (let step = 0; step < 4; step++) {
+        const x0 = cur % GRID_W;
+        const z0 = (cur / GRID_W) | 0;
+        let best = f[cur];
+        let next = cur;
+        for (const [ox, oz] of NEIGH8) {
+          const x = x0 + ox;
+          const z = z0 + oz;
+          if (x < 0 || z < 0 || x >= GRID_W || z >= GRID_H) continue;
+          const i = z * GRID_W + x;
+          if (f[i] < best && this.map.walkable(i)) {
+            best = f[i];
+            next = i;
+          }
+        }
+        if (next === cur) break;
+        cur = next;
+      }
+      if (cur !== c) {
+        const p = this.map.cellCenter(cur);
+        tx = p.x;
+        tz = p.z;
+      }
+    }
+    d.tx = prey.x;
+    d.tz = prey.z;
+    const dist = Math.hypot(tx - d.x, tz - d.z) || 1;
+    const stepLen = Math.min(speed * dt, Math.max(0, direct - stopAt));
+    const nx = d.x + ((tx - d.x) / dist) * stepLen;
+    const nz = d.z + ((tz - d.z) / dist) * stepLen;
+    if (!this.map.walkable(this.map.cellAt(nx, nz))) return this.moveBoss(d, tx, tz, speed, 0, dt, true);
+    d.x = nx;
+    d.z = nz;
+    return true;
+  }
+
+  private moveBoss(d: Dragon, tx: number, tz: number, speed: number, stopAt: number, dt: number, onLand = false) {
     d.tx = tx;
     d.tz = tz;
     const dist = Math.hypot(tx - d.x, tz - d.z);
     if (dist <= stopAt) return false;
     const step = Math.min(dist - stopAt, speed * dt);
-    d.x += ((tx - d.x) / dist) * step;
-    d.z += ((tz - d.z) / dist) * step;
+    const nx = d.x + ((tx - d.x) / dist) * step;
+    const nz = d.z + ((tz - d.z) / dist) * step;
+    // walkers do not wade into the sea: they slide along the coast
+    if (onLand && !this.map.walkable(this.map.cellAt(nx, nz))) {
+      for (const rot of [0.7, -0.7, 1.4, -1.4]) {
+        const a = Math.atan2(tx - d.x, tz - d.z) + rot;
+        const sx = d.x + Math.sin(a) * step;
+        const sz = d.z + Math.cos(a) * step;
+        if (this.map.walkable(this.map.cellAt(sx, sz))) {
+          d.x = sx;
+          d.z = sz;
+          return true;
+        }
+      }
+      return false;
+    }
+    d.x = nx;
+    d.z = nz;
     return true;
   }
 
@@ -1724,53 +2183,16 @@ export class Sim {
       const x = prey.x + ux * along;
       const z = prey.z + uz * along;
       const at = this.t + 0.5 + i * 0.18;
-      this.strikes.push({ kid: 0, x, z, at, r: ec.infernoRadius, dmg: ec.infernoDamage, castle: ec.infernoCastleDamage });
+      this.strikes.push({ kid: 0, x, z, at, r: ec.infernoRadius, dmg: ec.infernoDamage, castle: ec.infernoCastleDamage, style: "inferno" });
       this.emit({ k: "strike", x, z, r: ec.infernoRadius, delay: at - this.t, style: "inferno" });
     }
   }
 
-  /** The Titan walks to the leading kingdom, smashes what is near, shakes the ground, and leaves in a rage. */
+  /** The Titan walks to the leading kingdom, smashes what is near, shakes the ground. */
   private updateTitan(d: Dragon, dt: number) {
     const tc = this.cfg.titan;
-    if (this.t >= d.until) {
-      // time is up: one last blow on the leader's castle, then it walks out of the world
-      const lead = this.leaderboard().find((k) => !this.shielded(k));
-      if (lead) {
-        this.emit({ k: "boss", kind: "titan", act: "rampage", x: lead.x, z: lead.z, r: tc.slamRadius * 1.6 });
-        this.blast(lead.x, lead.z, tc.slamRadius * 1.6, tc.slamDamage * 2, tc.rampageCastleDamage);
-      }
-      this.dragon = null;
-      this.emit({ k: "dragon", state: "leave", by: null, kind: "titan", x: d.x, z: d.z });
-      return;
-    }
-    if (d.windup) {
-      if (this.t < d.windup.at) return;
-      const w = d.windup;
-      d.windup = null;
-      d.attackAt = this.t;
-      if (w.act === "slam") {
-        this.emit({ k: "boss", kind: "titan", act: "slam", x: w.x, z: w.z, r: tc.slamRadius });
-        this.blast(w.x, w.z, tc.slamRadius, tc.slamDamage, tc.castleDamage);
-      } else {
-        this.emit({ k: "boss", kind: "titan", act: "quake", x: d.x, z: d.z, r: tc.quakeRadius });
-        this.blast(d.x, d.z, tc.quakeRadius, tc.quakeDamage, 0);
-      }
-      return;
-    }
     const prey = this.bossPrey(d);
-    let crowd = 0;
-    let near: Unit | null = null;
-    let nd = tc.range + d.radius;
-    this.forNear(d.x, d.z, tc.quakeRadius, (o) => {
-      const k = this.kingdomById(o.kid);
-      if (k && this.shielded(k)) return;
-      const dist = Math.hypot(o.x - d.x, o.z - d.z);
-      if (dist <= tc.quakeRadius) crowd++;
-      if (dist < nd) {
-        nd = dist;
-        near = o;
-      }
-    });
+    const { crowd, near } = this.bossSurroundings(d, tc.range + d.radius, tc.quakeRadius);
     d.cd -= dt;
     d.special -= dt;
     // a crowd at its feet: stamp the ground
@@ -1785,18 +2207,307 @@ export class Sim {
     if (target && d.cd <= 0) {
       d.cd = tc.cooldown;
       // the club lands a little in front of it, toward the target
-      const dist = Math.hypot(target.x - d.x, target.z - d.z) || 1;
-      const reach = Math.min(dist, tc.range);
-      const x = d.x + ((target.x - d.x) / dist) * reach;
-      const z = d.z + ((target.z - d.z) / dist) * reach;
-      d.tx = target.x;
-      d.tz = target.z;
-      d.windup = { act: "slam", at: this.t + tc.windupSeconds, x, z };
-      this.emit({ k: "boss", kind: "titan", act: "windup", x, z, r: tc.slamRadius });
+      this.bossWindup(d, target, tc.range, tc.windupSeconds, tc.slamRadius);
       return;
     }
-    if (!target && prey) this.moveBoss(d, prey.x, prey.z, tc.speed * this.map.speedFactor(d.x, d.z), d.radius + 3, dt);
-    else if (near && !castleNear) this.moveBoss(d, (near as Unit).x, (near as Unit).z, tc.speed, tc.range, dt);
+    if (!target && prey) this.walkBoss(d, prey, tc.speed * this.map.speedFactor(d.x, d.z), d.radius + 3, dt);
+    else if (near && !castleNear) this.moveBoss(d, near.x, near.z, tc.speed, tc.range, dt, true);
+  }
+
+  /**
+   * Naga Tengkorak hunts the leader on bone wings. Its breath of soul fire heals it for every troop
+   * it kills; it raises a spiral of bone spikes under the prey's castle; when troops crowd beneath
+   * it, it wails and holds them all in place.
+   */
+  private updateBone(d: Dragon, dt: number) {
+    const c = this.cfg.boneDragon;
+    const prey = this.bossPrey(d);
+    if (prey) this.moveBoss(d, prey.x, prey.z, c.speed, c.range * 0.7, dt);
+    d.special -= dt;
+    d.special2 -= dt;
+    d.cd -= dt;
+    if (d.special2 <= 0) {
+      const { crowd } = this.bossSurroundings(d, 0, c.wailRadius);
+      if (crowd >= 5) {
+        d.special2 = c.wailEvery;
+        d.attackAt = this.t;
+        this.emit({ k: "boss", kind: "bone", act: "wail", x: d.x, z: d.z, r: c.wailRadius });
+        this.blast(d.x, d.z, c.wailRadius, c.wailDamage, 0);
+        this.hold(d.x, d.z, c.wailRadius, c.wailStunSeconds);
+        return;
+      }
+    }
+    if (d.special <= 0 && prey && Math.hypot(prey.x - d.x, prey.z - d.z) <= c.range * 2.5) {
+      d.special = c.spikeEvery;
+      this.emit({ k: "boss", kind: "bone", act: "spikes", x: prey.x, z: prey.z, r: c.spikeRadius * 4, fromX: d.x, fromZ: d.z });
+      // a spiral opening outward from the castle: there is nowhere to stand
+      for (let i = 0; i < c.spikeCount; i++) {
+        const a = i * 2.4;
+        const r = 1.5 + i * 0.95;
+        this.bossStrike(prey.x + Math.cos(a) * r, prey.z + Math.sin(a) * r, 0.7 + i * 0.11, c.spikeRadius, c.spikeDamage, i < 3 ? c.spikeCastleDamage : 0, "bone");
+      }
+      return;
+    }
+    if (d.cd > 0) return;
+    const { near } = this.bossSurroundings(d, c.range, 0);
+    if (near) {
+      const t = near;
+      d.cd = c.cooldown;
+      d.attackAt = this.t;
+      this.emit({ k: "shot", fromX: d.x, fromZ: d.z, x: t.x, z: t.z, type: "dragon", dmg: c.dmg, on: "unit" });
+      let drained = 0;
+      this.forNear(t.x, t.z, c.splash, (o) => {
+        if (!o.alive || Math.hypot(o.x - t.x, o.z - t.z) > c.splash) return;
+        this.hurt(o, c.dmg);
+        if (!o.alive) drained++;
+      });
+      d.hp = Math.min(d.maxHp, d.hp + drained * d.maxHp * c.drainPercent);
+    } else if (prey && !this.shielded(prey) && Math.hypot(prey.x - d.x, prey.z - d.z) <= c.range) {
+      d.cd = c.cooldown;
+      d.attackAt = this.t;
+      this.emit({ k: "shot", fromX: d.x, fromZ: d.z, x: prey.x, z: prey.z, type: "dragon", dmg: c.castleDamage, on: "castle" });
+      prey.hp -= c.castleDamage;
+      if (prey.hp <= 0) this.fall(prey, null);
+    }
+  }
+
+  /**
+   * Raksasa Es walks out of the ice to the leader. It hurls blocks of ice into the thickest crowd,
+   * smashes with both fists and freezes what it hits, and calls a blizzard around itself.
+   */
+  private updateYeti(d: Dragon, dt: number) {
+    const c = this.cfg.yeti;
+    const prey = this.bossPrey(d);
+    const { crowd, near } = this.bossSurroundings(d, c.range + d.radius, c.blizzardRadius);
+    d.cd -= dt;
+    d.special -= dt;
+    d.special2 -= dt;
+    if (d.special2 <= 0 && crowd >= 5) {
+      d.special2 = c.blizzardEvery;
+      d.attackAt = this.t;
+      d.zone = { r: c.blizzardRadius, until: this.t + c.blizzardSeconds, dps: c.blizzardDps, chill: true };
+      this.emit({ k: "boss", kind: "yeti", act: "blizzard", x: d.x, z: d.z, r: c.blizzardRadius });
+      return;
+    }
+    if (d.special <= 0) {
+      const aim: { x: number; z: number } | null =
+        this.densest(d.x, d.z, c.throwRange) ?? (prey && Math.hypot(prey.x - d.x, prey.z - d.z) <= c.throwRange ? prey : null);
+      if (aim && Math.hypot(aim.x - d.x, aim.z - d.z) > c.range) {
+        d.special = c.throwEvery;
+        d.attackAt = this.t;
+        const flight = 0.9 + Math.hypot(aim.x - d.x, aim.z - d.z) / 40;
+        this.emit({ k: "boss", kind: "yeti", act: "throw", x: aim.x, z: aim.z, r: c.throwRadius, fromX: d.x, fromZ: d.z });
+        this.bossStrike(aim.x, aim.z, flight, c.throwRadius, c.throwDamage, c.throwCastleDamage, "ice", c.freezeSeconds);
+        return;
+      }
+    }
+    const castleNear = prey && Math.hypot(prey.x - d.x, prey.z - d.z) <= c.range + d.radius + 2 ? prey : null;
+    const target: { x: number; z: number } | null = castleNear ?? near;
+    if (target && d.cd <= 0) {
+      d.cd = c.cooldown;
+      this.bossWindup(d, target, c.range, c.windupSeconds, c.slamRadius);
+      return;
+    }
+    // snow and ice do not slow it down
+    const pace = this.map.biomeAt(d.x, d.z) === "snow" ? 1.2 : this.map.speedFactor(d.x, d.z);
+    if (!target && prey) this.walkBoss(d, prey, c.speed * pace, d.radius + 3, dt);
+    else if (near && !castleNear) this.moveBoss(d, near.x, near.z, c.speed, c.range, dt, true);
+  }
+
+  /**
+   * The Kraken rises from the sea by the leader. Its tentacles slam the beach, grab troops and drag
+   * them under, and it sends waves over the shore; every so often it dives and comes up again by
+   * the kingdom that leads then.
+   */
+  private updateKraken(d: Dragon, dt: number) {
+    const c = this.cfg.kraken;
+    if (d.mode === 1) {
+      if (this.t < d.modeUntil) return;
+      const prey = this.bossPrey(d);
+      const spot = prey ? this.shoreNear(prey.x, prey.z) : null;
+      if (spot) {
+        d.x = d.tx = spot.x;
+        d.z = d.tz = spot.z;
+      }
+      d.mode = 0;
+      d.hidden = false;
+      d.cd = 1.5;
+      this.emit({ k: "boss", kind: "kraken", act: "surface", x: d.x, z: d.z, r: d.radius });
+      return;
+    }
+    d.special -= dt;
+    d.special2 -= dt;
+    d.special3 -= dt;
+    d.cd -= dt;
+    // the leader has moved on, or it is time: dive and come up elsewhere
+    if (d.special <= 0) {
+      d.special = c.diveEvery;
+      d.mode = 1;
+      d.hidden = true;
+      d.modeUntil = this.t + c.diveSeconds;
+      d.retargetAt = 0;
+      this.emit({ k: "boss", kind: "kraken", act: "dive", x: d.x, z: d.z, r: d.radius });
+      return;
+    }
+    const reach = c.reach;
+    if (d.special2 <= 0) {
+      // the grab: the nearest troops are seized and dragged under; the big ones tear free, hurt
+      const caught: Unit[] = [];
+      this.forNear(d.x, d.z, reach, (o) => {
+        const k = this.kingdomById(o.kid);
+        if (!o.alive || (k && this.shielded(k)) || this.hasTag(o.type, "flying") || Math.hypot(o.x - d.x, o.z - d.z) > reach) return;
+        caught.push(o);
+      });
+      if (caught.length) {
+        d.special2 = c.grabEvery;
+        d.attackAt = this.t;
+        caught.sort((a, b) => Math.hypot(a.x - d.x, a.z - d.z) - Math.hypot(b.x - d.x, b.z - d.z));
+        for (const o of caught.slice(0, c.grabCount)) {
+          this.emit({ k: "boss", kind: "kraken", act: "grab", x: o.x, z: o.z, r: 1.5, fromX: d.x, fromZ: d.z });
+          this.hurt(o, this.hasTag(o.type, "big") ? c.slamDamage * 2 : o.hp + 1);
+        }
+        return;
+      }
+    }
+    const prey = this.bossPrey(d);
+    if (d.special3 <= 0 && prey && Math.hypot(prey.x - d.x, prey.z - d.z) <= reach + 25) {
+      // a wall of water breaks over the shore, toward the prey
+      d.special3 = c.waveEvery;
+      d.attackAt = this.t;
+      const dist = Math.hypot(prey.x - d.x, prey.z - d.z) || 1;
+      const ux = (prey.x - d.x) / dist;
+      const uz = (prey.z - d.z) / dist;
+      const front = Math.min(dist, reach * 0.7);
+      this.emit({ k: "boss", kind: "kraken", act: "waveCall", x: d.x + ux * front, z: d.z + uz * front, r: c.waveRadius, fromX: d.x, fromZ: d.z });
+      const half = (c.waveCount - 1) / 2;
+      for (let i = 0; i < c.waveCount; i++) {
+        const side = (i - half) * c.waveRadius * 1.2;
+        const x = d.x + ux * front - uz * side;
+        const z = d.z + uz * front + ux * side;
+        this.bossStrike(x, z, 1.1 + Math.abs(i - half) * 0.12, c.waveRadius, c.waveDamage, c.waveCastleDamage, "wave");
+      }
+      return;
+    }
+    if (d.cd > 0) return;
+    const { near } = this.bossSurroundings(d, reach, 0);
+    const castleNear = prey && Math.hypot(prey.x - d.x, prey.z - d.z) <= reach + 2 ? prey : null;
+    const target = near ?? castleNear;
+    if (target) {
+      d.cd = c.cooldown;
+      this.bossWindup(d, target, reach, c.windupSeconds, c.slamRadius, "tentacle");
+    }
+  }
+
+  /**
+   * Treant Purba walks out of the great tree. Roots burst from the ground in a line to the prey's
+   * castle and hold whoever they catch; it smashes with its branch arms; in the forest it heals,
+   * and when hurt it blooms: a cloud of thorny spores around it and a burst of new growth.
+   */
+  private updateTreant(d: Dragon, dt: number) {
+    const c = this.cfg.treant;
+    if (this.map.biomeAt(d.x, d.z) === "forest") d.hp = Math.min(d.maxHp, d.hp + d.maxHp * c.forestRegen * dt);
+    const prey = this.bossPrey(d);
+    const { crowd, near } = this.bossSurroundings(d, c.range + d.radius, c.bloomRadius);
+    d.cd -= dt;
+    d.special -= dt;
+    d.special2 -= dt;
+    if (d.special2 <= 0 && (d.hp < d.maxHp * 0.8 || crowd >= 8)) {
+      d.special2 = c.bloomEvery;
+      d.attackAt = this.t;
+      d.hp = Math.min(d.maxHp, d.hp + d.maxHp * c.bloomHeal);
+      d.zone = { r: c.bloomRadius, until: this.t + c.bloomSeconds, dps: c.bloomDps, chill: false };
+      this.emit({ k: "boss", kind: "treant", act: "bloom", x: d.x, z: d.z, r: c.bloomRadius });
+      return;
+    }
+    const lineLen = c.rootCount * c.rootSpacing + d.radius;
+    if (d.special <= 0 && prey && Math.hypot(prey.x - d.x, prey.z - d.z) <= lineLen + 6) {
+      d.special = c.rootEvery;
+      d.attackAt = this.t;
+      const dist = Math.hypot(prey.x - d.x, prey.z - d.z) || 1;
+      const ux = (prey.x - d.x) / dist;
+      const uz = (prey.z - d.z) / dist;
+      this.emit({ k: "boss", kind: "treant", act: "roots", x: prey.x, z: prey.z, r: c.rootRadius, fromX: d.x, fromZ: d.z });
+      // the roots run along the ground from its feet, the last of them under the castle
+      const step = Math.max(c.rootSpacing, (dist - d.radius) / c.rootCount);
+      for (let i = 0; i < c.rootCount; i++) {
+        const along = d.radius + step * (i + 1);
+        this.bossStrike(d.x + ux * along, d.z + uz * along, 0.45 + i * 0.13, c.rootRadius, c.rootDamage, c.rootCastleDamage, "root", c.rootSeconds);
+      }
+      return;
+    }
+    const castleNear = prey && Math.hypot(prey.x - d.x, prey.z - d.z) <= c.range + d.radius + 2 ? prey : null;
+    const target: { x: number; z: number } | null = castleNear ?? near;
+    if (target && d.cd <= 0) {
+      d.cd = c.cooldown;
+      this.bossWindup(d, target, c.range, c.windupSeconds, c.slamRadius);
+      return;
+    }
+    // the forest makes way for it
+    const pace = this.map.biomeAt(d.x, d.z) === "forest" ? 1.15 : this.map.speedFactor(d.x, d.z);
+    if (!target && prey) this.walkBoss(d, prey, c.speed * pace, d.radius + 3, dt);
+    else if (near && !castleNear) this.moveBoss(d, near.x, near.z, c.speed, c.range, dt, true);
+  }
+
+  /**
+   * Cacing Pasir: on the surface it spits sand and raises a sandstorm; then it burrows, tunnels
+   * under the thickest crowd by the leader and bursts up, swallowing what stands on top.
+   */
+  private updateWorm(d: Dragon, dt: number) {
+    const c = this.cfg.worm;
+    const prey = this.bossPrey(d);
+    if (d.mode === 0) {
+      if (!d.zone) d.zone = { r: c.stormRadius, until: d.modeUntil, dps: c.stormDps, chill: true };
+      if (this.t >= d.modeUntil) {
+        d.mode = 1;
+        d.hidden = true;
+        d.zone = null;
+        d.modeUntil = this.t + 12;
+        this.emit({ k: "boss", kind: "worm", act: "burrow", x: d.x, z: d.z, r: d.radius });
+        return;
+      }
+      d.cd -= dt;
+      if (d.cd > 0) return;
+      const aim: { x: number; z: number } | null =
+        this.densest(d.x, d.z, c.range, 3) ?? (prey && Math.hypot(prey.x - d.x, prey.z - d.z) <= c.range ? prey : null);
+      if (aim) {
+        d.cd = c.cooldown;
+        d.attackAt = this.t;
+        d.tx = aim.x;
+        d.tz = aim.z;
+        const flight = 0.35 + Math.hypot(aim.x - d.x, aim.z - d.z) / 30;
+        this.emit({ k: "boss", kind: "worm", act: "spit", x: aim.x, z: aim.z, r: c.spitSplash, fromX: d.x, fromZ: d.z });
+        this.bossStrike(aim.x, aim.z, flight, c.spitSplash, c.spitDamage, c.spitDamage, "sand");
+      }
+      return;
+    }
+    if (d.mode === 1) {
+      // under the sand: head for the thickest crowd around the prey, or the castle itself
+      const around = prey ? (this.densest(prey.x, prey.z, 22, 3) ?? prey) : null;
+      const goal = around ? { x: around.x, z: around.z } : { x: d.tx, z: d.tz };
+      const arrived = !this.moveBoss(d, goal.x, goal.z, c.tunnelSpeed, 0.8, dt);
+      if (arrived || this.t >= d.modeUntil) {
+        d.mode = 2;
+        d.modeUntil = this.t + c.eruptWarnSeconds;
+        this.emit({ k: "boss", kind: "worm", act: "eruptWindup", x: d.x, z: d.z, r: c.eruptRadius });
+      }
+      return;
+    }
+    if (this.t < d.modeUntil) return;
+    // it bursts up: everything in the circle is thrown, the ones right on top are swallowed whole
+    d.mode = 0;
+    d.hidden = false;
+    d.attackAt = this.t;
+    d.cd = 1;
+    d.modeUntil = this.t + c.surfaceSeconds;
+    this.emit({ k: "boss", kind: "worm", act: "erupt", x: d.x, z: d.z, r: c.eruptRadius });
+    const gulp: Unit[] = [];
+    this.forNear(d.x, d.z, c.swallowRadius, (o) => {
+      const k = this.kingdomById(o.kid);
+      if (!o.alive || (k && this.shielded(k)) || this.hasTag(o.type, "big") || this.hasTag(o.type, "flying")) return;
+      if (Math.hypot(o.x - d.x, o.z - d.z) <= c.swallowRadius) gulp.push(o);
+    });
+    for (const o of gulp.slice(0, c.swallowCount)) this.hurt(o, o.hp + 1);
+    this.blast(d.x, d.z, c.eruptRadius, c.eruptDamage, c.eruptCastleDamage);
   }
 
   /** Damage to the boss from a kingdom (or from nobody, a viewer without a kingdom). */
@@ -1823,8 +2534,10 @@ export class Sim {
       }
     }
     this.dragon = null;
+    this.bossField = null;
     if (best) {
       best.dragonDamage += bd;
+      const timed = this.timedCfg(d.kind);
       if (d.kind === "dragon") {
         this.gainExp(best, this.cfg.dragon.rewardExp);
         this.makeUnit(best, "dragon", false, null, { x: d.x, z: d.z });
@@ -1833,10 +2546,9 @@ export class Sim {
         this.gainExp(best, this.cfg.dragon.rewardExp * ec.rewardExpMultiplier);
         for (let i = 0; i < ec.rewardLevels; i++) this.gainExp(best, Math.max(0, best.nextExp - best.exp));
         for (let i = 0; i < ec.rewardDragons; i++) this.makeUnit(best, "dragon", false, null, { x: d.x + i * 3, z: d.z });
-      } else {
-        const tc = this.cfg.titan;
-        for (let i = 0; i < tc.rewardLevels; i++) this.gainExp(best, Math.max(0, best.nextExp - best.exp));
-        this.spawnUnits(best, tc.rewardUnits as UnitBundle, "titan", null, false);
+      } else if (timed) {
+        for (let i = 0; i < timed.rewardLevels; i++) this.gainExp(best, Math.max(0, best.nextExp - best.exp));
+        this.spawnUnits(best, timed.rewardUnits as UnitBundle, d.kind, null, false);
       }
     }
     // the killing blow on the Titan earns a level of its own
