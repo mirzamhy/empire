@@ -185,15 +185,18 @@ sela milestone diisi oleh Gelombang Rakyat per ronde (4.2).
   "Andi menyalip Budi!"
 
 #### D. Boss Jempol
-Boss muncul di milestone 50.000 dan di giliran ulang. Tahap pertama memakai satu boss untuk semua
-peta, **Titan Neraka** (D-034). Boss per peta di bawah ini menyusul:
+Boss muncul di milestone 50.000 dan di giliran ulang. Titan Neraka adalah boss universal (D-034).
+Sejak D-035, tiap peta juga punya monster sendiri (`sim.regionBoss()`), sudah ada di game:
 
-| Peta | Boss | Muncul di |
-|---|---|---|
-| 1–3 (hutan) | 🌳 Treant Purba | Pohon Purba |
-| 4 Tiga Alam | ❄️ Raksasa Es | Mahkota Es |
-| 5 Teluk Naga | 🐙 Kraken | Teluk terbesar, menyerang kastil di pantai |
-| Peta bergurun | 🐛 Cacing Pasir | Gerbang Batu Merah |
+| Peta | Boss | Muncul di | Mekanik khas |
+|---|---|---|---|
+| 2–3 (hutan) | 🌳 Treant Purba | Pohon Purba | Akar menahan pasukan, pulih di hutan, Mekar Purba |
+| 4 Tiga Alam | ❄️ Raksasa Es | Mahkota Es | Lempar bongkah es (membekukan), badai salju |
+| 5 Teluk Naga | 🐙 Kraken | Laut di pantai pemimpin | Tentakel, menyeret pasukan ke laut, gelombang pasang, menyelam |
+| 1 (gurun) | 🪱 Cacing Pasir | Gerbang Batu Merah / gurun | Menggali, menyembur di bawah kerumunan, menelan pasukan |
+| semua | 💀 Naga Tengkorak | Kerangka Naga | Napas jiwa yang menyembuhkan, duri tulang, Jeritan Arwah |
+
+Naga Tengkorak cocok untuk milestone **Gerhana** (300.000) atau giliran ulang setelah 5 juta.
 
 Cara kerjanya:
 - Pasukan kerajaan menyerang boss seperti biasa.
