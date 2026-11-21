@@ -20,6 +20,7 @@ export default defineConfig({
       input: {
         main: fileURLToPath(new URL("./game/index.html", import.meta.url)),
         units: fileURLToPath(new URL("./game/units.html", import.meta.url)),
+        bosses: fileURLToPath(new URL("./game/bosses.html", import.meta.url)),
       },
     },
   },

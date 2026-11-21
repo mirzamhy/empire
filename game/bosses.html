@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EMPIRE · Model Boss</title>
+  <style>
+    :root { --bg: #e9ebee; --cell: #f6f7f8; --line: #d3d7dc; --text: #1d252c; --mute: #66727d; --accent: #b3471d; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
+    header { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 14px 16px 6px; }
+    h1 { margin: 0; font-size: 18px; letter-spacing: 0.04em; }
+    nav { display: flex; flex-wrap: wrap; gap: 6px; }
+    nav button { border: 1px solid var(--line); background: #fff; color: var(--text); border-radius: 999px; padding: 5px 12px; font: inherit; cursor: pointer; }
+    nav button[aria-pressed="true"] { background: var(--text); color: #fff; border-color: var(--text); }
+    label.pose { color: var(--mute); display: flex; gap: 6px; align-items: center; }
+    #grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 10px 16px 16px; }
+    figure { margin: 0; background: var(--cell); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    figure canvas { display: block; width: 100%; aspect-ratio: 1; }
+    figcaption { padding: 6px 10px; font-size: 12px; font-weight: 600; color: var(--mute); text-transform: uppercase; letter-spacing: 0.08em; border-top: 1px solid var(--line); }
+    .stats { color: var(--mute); font-size: 12px; margin-left: auto; }
+    figure { cursor: zoom-in; }
+    #grid.one { grid-template-columns: minmax(0, 860px); justify-content: center; }
+    #grid.one figure:not(.big) { display: none; }
+    #grid.one figure.big { cursor: zoom-out; }
+    @media (max-width: 720px) { #grid { grid-template-columns: repeat(2, 1fr); } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Model Boss</h1>
+    <nav id="pick"></nav>
+    <label class="pose"><input type="checkbox" id="pose" checked /> pose main</label>
+    <span id="stats" class="stats"></span>
+  </header>
+  <main id="grid"></main>
+  <script type="module" src="/src/bossview.ts"></script>
+</body>
+</html>
