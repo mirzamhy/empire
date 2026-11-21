@@ -8,6 +8,7 @@
 //   - rage: a red eruption at the castle and embers rising from the troops while it lasts
 // Troops also show what they suffer from: flames, green bubbles, frost, sparks while stunned.
 import * as THREE from "three";
+import { MONSTER_STYLES } from "./monsterfx";
 import type { SpellId } from "../sim/config";
 import type { WorldMap } from "../sim/map";
 import type { Sim, SimEvent, Unit } from "../sim/world";
@@ -296,6 +297,8 @@ export class SpellFx {
         break;
       }
       case "impact":
+        // the regional bosses' blows (ice, roots, bones, waves, sand) have their own look (monsterfx.ts)
+        if (e.style && MONSTER_STYLES.includes(e.style)) break;
         this.meteorImpact(e.x, e.z, e.r, e.dmg, sim?.cfg.spells.meteor.burnSeconds ?? 4);
         break;
       case "chain":

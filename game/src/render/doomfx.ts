@@ -177,7 +177,7 @@ export class DoomFx {
         this.doom = { warnAt: now, start: now + e.warn, end: now + e.seconds, x: e.x, z: e.z };
         break;
       case "strike":
-        if (!e.style) break;
+        if (e.style !== "meteor" && e.style !== "mother" && e.style !== "inferno") break;
         this.falls.push({
           style: e.style, x: e.x, z: e.z, y: this.ground(e.x, e.z), r: e.r, hit: now + e.delay,
           dur: e.style === "mother" ? Math.min(e.delay, 5) : e.style === "inferno" ? Math.min(e.delay, 0.5) : FALL, warned: -9,

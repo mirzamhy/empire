@@ -7,6 +7,7 @@ import type { UnitType } from "../sim/config";
 import { SpellFx } from "./spellfx";
 import { BossRenderer } from "./bosses/bosses";
 import { DoomFx } from "./doomfx";
+import { MonsterFx } from "./monsterfx";
 
 type ShotType = UnitType | "tower" | "dragon";
 
@@ -297,6 +298,8 @@ interface Bolt {
   dmg: number; on: HitTarget;
   /** what was aimed at (castle centre for castle shots) */
   cx: number; cz: number;
+  /** colour of a boss's fire where it lands (Naga Tengkorak burns green) */
+  tint?: number;
 }
 
 const SHOT_COLOR: Record<string, number> = {
@@ -355,8 +358,10 @@ export class Fx {
   readonly bosses: BossRenderer;
   /** Hujan Meteor Dunia and hellfire */
   readonly doom: DoomFx;
+  /** ice, roots, bone spikes, waves and sand of the regional bosses and Naga Tengkorak */
+  readonly monsters: MonsterFx;
   /** Fire streams: flames pour from a mouth to a target for a short while. id = unit, undefined = World Dragon. */
-  private breaths: { id?: number; tx: number; ty: number; tz: number; t0: number; until: number; scale: number }[] = [];
+  private breaths: { id?: number; tx: number; ty: number; tz: number; t0: number; until: number; scale: number; palette: [number, number, number] }[] = [];
   /** World position of a unit's socket; wired by main.ts to the unit renderer. */
   socketOf: (unitId: number, socket: "mouth" | "muzzle" | "weaponTip", out: THREE.Vector3) => boolean = () => false;
 
@@ -405,7 +410,8 @@ export class Fx {
     this.spells = new SpellFx(this, map);
     this.bosses = new BossRenderer(this, map);
     this.doom = new DoomFx(this, map);
-    this.group.add(this.spells.group, this.bosses.group, this.doom.group);
+    this.monsters = new MonsterFx(this, map);
+    this.group.add(this.spells.group, this.bosses.group, this.doom.group, this.monsters.group);
   }
 
   private instanced(geo: THREE.BufferGeometry, mat: THREE.Material, cap: number) {
@@ -424,6 +430,7 @@ export class Fx {
     this.spells.onEvent(e, now, sim);
     this.bosses.onEvent(e, now);
     this.doom.onEvent(e, now);
+    this.monsters.onEvent(e, now, sim);
     switch (e.k) {
       case "likeShot": {
         // a stone from the crowd, arcing up to the Titan's chest; hearts where it leaves
@@ -450,11 +457,12 @@ export class Fx {
           type: e.type, fx: e.fromX, fz: e.fromZ, fy, tx, tz, ty,
           cx: e.x, cz: e.z,
           t0: now, dur: dragon ? 0.3 : Math.max(0.15, d / speed), arc: e.type === "trebuchet" ? 0.5 * d : lob ? 0.22 * d : 0.04 * d, dmg: e.dmg, on: e.on,
+          tint: dragon && e.id === undefined && this.bosses.active === "bone" ? 0x45f5a8 : undefined,
         });
         if (dragon) {
           // flames leave the mouth for 0.65 s; the World Dragon (no id) also turns to face its target
           const world = e.id === undefined;
-          this.breaths.push({ id: e.id, tx, ty, tz, t0: now, until: now + 0.65, scale: world ? this.bosses.breathScale : 1 });
+          this.breaths.push({ id: e.id, tx, ty, tz, t0: now, until: now + 0.65, scale: world ? this.bosses.breathScale : 1, palette: world ? this.bosses.breathPalette : [0xfff0a0, 0xffb030, 0xff5a1a] });
           if (world) this.bosses.aim(e.fromX, e.fromZ, e.x, e.z, now);
         }
         else if (e.type === "wizard") this.burst(this.glow, e.fromX, h(e.fromX, e.fromZ) + 1.5, e.fromZ, now, 4, 0xff9a3a, 1.5, 0.25, 0.3);
@@ -512,6 +520,7 @@ export class Fx {
     this.numbers.clear();
     this.castleDmg.clear();
     this.doom.reset();
+    this.monsters.reset();
   }
 
   // ---------------------------------------------------------------- effect builders
@@ -611,8 +620,8 @@ export class Fx {
         this.ring(x, z, now, 2.2, 0x8b45e0, 0.5);
         break;
       case "dragon":
-        this.explosion(x, y, z, now, 1.5, 0xff5a1a);
-        this.scorchMark(x, z, now, 2.6);
+        this.explosion(x, y, z, now, 1.5, b.tint ?? 0xff5a1a);
+        this.scorchMark(x, z, now, 2.6, b.tint ? 0x0e2a1c : undefined);
         this.onShake(0.35, x, z);
         break;
       default:
@@ -649,7 +658,7 @@ export class Fx {
       const n = Math.max(1, Math.round(dt * 110));
       for (let i = 0; i < n; i++) {
         const hot = Math.random();
-        this.c.set(hot < 0.25 ? 0xfff0a0 : hot < 0.6 ? 0xffb030 : 0xff5a1a);
+        this.c.set(hot < 0.25 ? b.palette[0] : hot < 0.6 ? b.palette[1] : b.palette[2]);
         this.glow.add({
           x: this.p.x, y: this.p.y, z: this.p.z,
           vx: (dx / dist) * speed + rand(-spread, spread), vy: (dy / dist) * speed + rand(-spread, spread), vz: (dz / dist) * speed + rand(-spread, spread),
@@ -659,7 +668,7 @@ export class Fx {
       }
       // the ground burns where the stream lands
       if (now - b.t0 > 0.25 && Math.random() < dt * 30) {
-        this.burst(this.glow, b.tx + rand(-1, 1) * b.scale, b.ty - 0.4, b.tz + rand(-1, 1) * b.scale, now, 1, 0xff7a1a, 0.8, 0.5 * b.scale, 0.5, 1.5, -2);
+        this.burst(this.glow, b.tx + rand(-1, 1) * b.scale, b.ty - 0.4, b.tz + rand(-1, 1) * b.scale, now, 1, b.palette[1], 0.8, 0.5 * b.scale, 0.5, 1.5, -2);
         this.burst(this.dust, b.tx, b.ty, b.tz, now, 1, 0x3a302c, 1.2, 0.6 * b.scale, 1.0, 1.2, -0.6);
       }
     }
@@ -767,6 +776,7 @@ export class Fx {
 
     this.bosses.update(sim, now, dt);
     this.doom.update(now, dt);
+    this.monsters.update(sim, now, dt);
   }
 
   private updateBolts(now: number) {
