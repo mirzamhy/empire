@@ -24,6 +24,10 @@ export function buildBoneDragon(): BossModel {
   const eye = glow(0x6dfff0);
   const rune = glow(0x22b878);
   const glows = [soul, hot, eye, rune, soulDeep];
+  // what is left of the wing membranes: a faint sheet of soul light between the finger bones
+  const ghost = new THREE.MeshBasicMaterial({ color: 0x45f5a8, transparent: true, opacity: 0.13, side: THREE.DoubleSide, depthWrite: false });
+  const rust = lambert(0x6b3f2a);
+  const tip = lambert(0x3b352c);
 
   /** One vertebra: a disc with a hooked spine on top and two side spurs. */
   const vertebra = (parent: THREE.Object3D, z: number, r: number, y = 0, spike = r * 2.2) => {
@@ -51,8 +55,16 @@ export function buildBoneDragon(): BossModel {
   }
   part(body, box(0.18, 0.12, 2.4), old, 0, -0.98, 0.5); // sternum
   // the heart: a ball of soul fire with a white core, and wisps rising from it
-  part(body, ico(0.2, 1), hot, 0, -0.05, 0.75);
-  part(body, ico(0.34, 1), soul, 0, -0.05, 0.75).scale.set(1, 1.25, 0.9);
+  part(body, ico(0.2, 2), hot, 0, -0.05, 0.75);
+  part(body, ico(0.34, 2), soul, 0, -0.05, 0.75).scale.set(1, 1.25, 0.9);
+  // veins of soul fire running from the heart out to the ribs: the fire is what holds the bones
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const to = [Math.cos(a) * 0.95, -0.1 + Math.sin(a) * 0.7, 0.75 + ((i % 3) - 1) * 0.5];
+    const mid = [to[0] * 0.5, -0.05 + Math.sin(a) * 0.3 + 0.1, 0.75 + (to[2] - 0.75) * 0.4];
+    seg(body, soulDeep, [0, -0.05, 0.75], mid, 0.035, 0.025, 4);
+    seg(body, soulDeep, mid, to, 0.025, 0.012, 4);
+  }
   // tongues of soul fire licking up from the heart, and embers caught between the ribs
   for (let i = 0; i < 5; i++) {
     const a = i * 1.26;
@@ -66,8 +78,26 @@ export function buildBoneDragon(): BossModel {
     part(body, ring(0.1, 0.03, 6), iron, -1.05 + t * 2.1, 0.4 - Math.sin(t * Math.PI) * 0.65, 1.2 - t * 0.6, 0, i % 2 ? Math.PI / 2 : 0, 0.4);
   }
   part(body, box(0.05, 0.3, 0.05), rune, -0.7, -0.1, 1.15, 0, 0, 0.5);
-  // pelvis and the scapulae over the shoulders
-  part(body, taperBox(1.0, 0.6, 0.5, 0.8, 0.5), old, 0, 0.35, -1.55);
+  // little tongues of soul fire flickering between the spines down the back
+  for (let i = 0; i < 4; i++) part(body, cone(0.07, 0.4, 4), i % 2 ? soul : soulDeep, 0, 1.1, 1.5 - i * 0.84, -0.3, 0, 0);
+  // a broken rib on the left: snapped short, its jagged end hanging free
+  seg(body, old, [1.05, -0.2, -0.85], [1.22, -0.55, -0.95], 0.05, 0.02, 4);
+  // trophies of its old kills, small skulls on chains swinging under the ribs
+  const trophy = (x: number, y: number, z: number, r: number) => {
+    part(body, ico(r, 1), bone, x, y, z).scale.set(1, 0.9, 1.1);
+    part(body, box(r * 0.8, r * 0.4, r * 0.7), old, x, y - r * 0.7, z + r * 0.15);
+    for (const s of [-1, 1]) part(body, ico(r * 0.25, 0), socket, x + s * r * 0.4, y - r * 0.1, z + r * 0.85);
+  };
+  for (const [x, z, n] of [[-0.45, 0.25, 3], [0.5, -0.6, 2]] as const) {
+    for (let i = 0; i < n; i++) part(body, ring(0.06, 0.02, 6), iron, x, -0.95 - i * 0.12, z, 0, i % 2 ? Math.PI / 2 : 0, 0);
+    trophy(x, -0.95 - n * 0.12 - 0.12, z, 0.13);
+  }
+  // pelvis: a sacrum fused to the spine and two flaring hip blades with holes worn through them
+  part(body, taperBox(0.5, 0.3, 0.45, 0.9, 0.5), old, 0, 0.45, -1.55);
+  for (const s of [-1, 1]) {
+    part(body, taperBox(0.75, 0.35, 0.12, 0.65, 0.45), bone, s * 0.48, 0.25, -1.5, 0, 0, s * 0.7);
+    part(body, box(0.14, 0.14, 0.14), socket, s * 0.6, 0.15, -1.45);
+  }
   for (const s of [-1, 1]) {
     part(body, taperBox(0.55, 0.2, 0.08, 0.8, 0.5), bone, s * 0.65, 0.65, 1.2, 0.2, 0, s * 0.6);
     part(body, ico(0.22, 0), dark, s * 0.75, -0.2, -1.5);
@@ -83,6 +113,14 @@ export function buildBoneDragon(): BossModel {
   }
   // wisps of soul fire between the bones
   part(neck2, ico(0.16, 0), soul, 0, -0.05, 0.5);
+  // the iron collar of the old binding, still locked round the base of the neck, runes burning in
+  // it, and the broken end of its chain hanging down
+  part(neck1, ring(0.3, 0.07, 10), iron, 0, 0, 0.35);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    part(neck1, box(0.08, 0.08, 0.12), i % 2 ? rune : rust, Math.cos(a) * 0.32, Math.sin(a) * 0.32, 0.35);
+  }
+  for (let i = 0; i < 4; i++) part(neck1, ring(0.08, 0.022, 6), iron, 0.05, -0.38 - i * 0.13, 0.35 - i * 0.05, 0, i % 2 ? Math.PI / 2 : 0, 0);
 
   // ---------------------------------------------------------------- skull
   const head = pivot(neck3, "head", 0, 0, 0.85, 0.75);
@@ -109,6 +147,26 @@ export function buildBoneDragon(): BossModel {
     seg(head, bone, [s * 0.38, -0.02, 0.25], [s * 0.8, -0.12, -0.3], 0.07, 0, 4); // cheek spike
   }
   part(head, box(0.04, 0.3, 0.04), socket, 0.08, 0.36, 0.3, 0, 0, 0.4); // crack in the skull
+  // heavy brows over the sockets, a horn on the snout and a frill of bone blades behind the crown
+  for (const s of [-1, 1]) {
+    part(head, taperBox(0.3, 0.18, 0.1, 0.32, 0.2), old, s * 0.3, 0.33, 0.66, 0.2, 0, -s * 0.25);
+    seg(head, old, [s * 0.15, 0.1, 1.62], [s * 0.2, 0.26, 1.55], 0.05, 0, 4); // nostril spurs
+    // ridges round each great horn, like the rings on the horn of a ram
+    for (let i = 1; i <= 3; i++) {
+      const t = i / 4;
+      part(head, ring(0.14 - t * 0.06, 0.025, 6), old, s * (0.28 + t * 0.35), 0.32 + t * 0.4, 0.15 - t * 0.62, 0.9, 0, s * 0.5);
+    }
+    // a smaller pair of horns under the great ones, curling forward
+    seg(head, bone, [s * 0.36, 0.05, 0.05], [s * 0.62, -0.05, -0.25], 0.08, 0.05, 5);
+    seg(head, dark, [s * 0.62, -0.05, -0.25], [s * 0.66, -0.3, -0.05], 0.05, 0, 4);
+  }
+  seg(head, bone, [0, 0.2, 1.4], [0, 0.48, 1.55], 0.08, 0, 4);
+  for (let i = 0; i < 5; i++) {
+    const a = (i - 2) * 0.38;
+    seg(head, i % 2 ? old : bone, [Math.sin(a) * 0.25, 0.25, -0.05], [Math.sin(a) * 0.65, 0.35 + Math.cos(a) * 0.25, -0.65], 0.07, 0, 4);
+  }
+  // two long fangs at the front of the upper jaw
+  for (const s of [-1, 1]) seg(head, bone, [s * 0.2, -0.2, 1.62], [s * 0.18, -0.58, 1.58], 0.06, 0, 4);
   // jaw: bare bone, the teeth long and uneven, fire glowing between them
   const jaw = pivot(head, "jaw", 0, -0.2, 0.15);
   part(jaw, taperBox(0.56, 0.32, 1.45, 0.14, 0.08), bone, 0, -0.1, 0.82, Math.PI / 2, 0, 0);
@@ -116,7 +174,11 @@ export function buildBoneDragon(): BossModel {
   for (const s of [-1, 1]) {
     for (const z of [1.45, 1.2, 0.95, 0.7]) part(jaw, cone(0.04, 0.17 + (z > 1.3 ? 0.08 : 0), 3), bone, s * 0.18, 0.04, z);
     seg(jaw, old, [s * 0.18, -0.15, 0.4], [s * 0.38, -0.38, 0.05], 0.05, 0, 4);
+    // tusks at the tip of the chin
+    seg(jaw, bone, [s * 0.14, 0.0, 1.5], [s * 0.2, 0.36, 1.52], 0.05, 0, 4);
   }
+  // soul fire dripping from between the teeth
+  for (let i = 0; i < 3; i++) part(jaw, cone(0.05, 0.3, 4), i % 2 ? soulDeep : soul, (i - 1) * 0.12, -0.32, 0.6 + i * 0.3, Math.PI, 0, 0);
 
   // ---------------------------------------------------------------- wings: bare finger bones and rags
   const wing = (s: -1 | 1) => {
@@ -148,7 +210,14 @@ export function buildBoneDragon(): BossModel {
       part(w2, sheet([[0, 0, 0], [t[0] * 0.8, 0, t[2] * 0.8], [m2[0] * 0.75, -0.05, m2[2] * 0.75]], [[0, 1, 2]]), rag);
       part(w2, sheet([[t[0] * 0.5, 0, t[2] * 0.5], [t[0] * 0.95, 0, t[2] * 0.95], [m2[0] * 1.0, -0.1, m2[2] * 1.0]], [[0, 1, 2]]), rag);
       part(w2, ico(0.06, 0), soul, t[0] * 0.98, 0, t[2] * 0.98); // a flame on each fingertip
+      // the faint ghost of the old membrane spanning the gap, and a strip of rag hanging off the bone
+      part(w2, sheet([[0, -0.02, 0], [t[0], -0.02, t[2]], [b[0], -0.04, b[2]]], [[0, 1, 2]]), ghost);
+      part(w2, sheet([[mid[0], 0, mid[2]], [mid[0] + s * 0.15, 0, mid[2] - 0.05], [mid[0] + s * 0.05, -0.55, mid[2] - 0.25]], [[0, 1, 2]]), rag);
+      seg(w2, tip, t, [t[0] * 1.08, -0.08, t[2] * 1.08], 0.025, 0, 4); // a hooked claw at each tip
     });
+    // between the arm and the first finger as well
+    part(w, sheet([[0, -0.02, 0], [wrist[0], wrist[1] - 0.02, wrist[2]], [s * 0.4, -0.1, -2.2]], [[0, 1, 2]]), ghost);
+    part(w2, sheet([[0, -0.02, 0], [tips[2][0], -0.02, tips[2][2]], [tips[3][0] - wrist[0], -0.1, tips[3][2] - wrist[2]]], [[0, 1, 2]]), ghost);
     return [w, w2];
   };
   const [wingR, wingR2] = wing(-1);
@@ -161,7 +230,19 @@ export function buildBoneDragon(): BossModel {
     seg(g, bone, [0, -0.1, 0], [0, -0.8, front ? 0.25 : 0.1], 0.1, 0.08, 5);
     part(g, ico(0.12, 0), old, 0, -0.8, front ? 0.25 : 0.1);
     seg(g, bone, [0, -0.8, front ? 0.25 : 0.1], [0, -1.4, front ? 0.42 : 0.25], 0.08, 0.06, 5);
-    for (let i = -1; i <= 1; i++) seg(g, old, [i * 0.08, -1.42, front ? 0.42 : 0.25], [i * 0.2, -1.6, front ? 0.9 : 0.72], 0.04, 0, 4);
+    const fz = front ? 0.42 : 0.25;
+    part(g, ico(0.1, 0), old, 0, -1.42, fz);
+    // three toes of two bones each, curling down into black hooked talons, and a spur at the heel
+    for (let i = -1; i <= 1; i++) {
+      const k = [i * 0.14, -1.5, fz + 0.3];
+      seg(g, bone, [i * 0.06, -1.42, fz], k, 0.045, 0.035, 4);
+      part(g, ico(0.045, 0), old, k[0], k[1], k[2]);
+      seg(g, bone, k, [i * 0.2, -1.55, fz + 0.52], 0.035, 0.03, 4);
+      seg(g, tip, [i * 0.2, -1.55, fz + 0.52], [i * 0.22, -1.72, fz + 0.62], 0.03, 0, 4);
+    }
+    seg(g, old, [0, -1.4, fz - 0.05], [0, -1.6, fz - 0.3], 0.04, 0, 4);
+    // a spur of bone sticking back from the knee
+    seg(g, old, [0, -0.8, (front ? 0.25 : 0.1) - 0.05], [0, -0.65, (front ? 0.25 : 0.1) - 0.4], 0.05, 0, 4);
     return g;
   };
   const armR = limb("armR", -0.62, 1.15, true);
@@ -178,8 +259,18 @@ export function buildBoneDragon(): BossModel {
     seg(t, dark, [0, 0, 0], [0, 0, -len], r * 0.45, r * 0.35, 5);
     for (let i = 0; i < 3; i++) vertebra(t, -0.15 - i * (len / 3), r, 0, r * 2.2);
   }
-  part(tail4, sheet([[0, 0, -0.8], [0, 0.9, -1.4], [0, 0.6, -2.3], [0, 0.2, -1.5]], [[0, 1, 3], [1, 2, 3], [0, 3, 1], [1, 3, 2]]), bone);
-  seg(tail4, soul, [0, 0.85, -1.4], [0, 0.6, -2.2], 0.03, 0.02, 4);
+  // the scythe: a thick curved blade of bone with a darker edge and a rune of soul fire down it
+  const blade = [[0, 0, -0.7], [0, 0.55, -0.95], [0, 1.05, -1.4], [0, 1.0, -1.95], [0, 0.6, -2.45], [0, 0.45, -1.9], [0, 0.5, -1.45], [0, 0.15, -1.2]];
+  const faces = [[0, 1, 7], [1, 6, 7], [1, 2, 6], [2, 5, 6], [2, 3, 5], [3, 4, 5]];
+  for (const x of [-0.05, 0.05]) {
+    const pts = blade.map(([, y, z]) => [x, y, z]);
+    part(tail4, sheet(pts, x < 0 ? faces.map(([a, b, c]) => [a, c, b]) : faces), bone);
+  }
+  for (let i = 1; i < 4; i++) seg(tail4, dark, [0, blade[i][1], blade[i][2]], [0, blade[i + 1][1], blade[i + 1][2]], 0.06, 0.05, 4); // the edge
+  seg(tail4, soul, [0, 0.55, -1.2], [0, 0.85, -1.6], 0.035, 0.03, 4);
+  seg(tail4, soul, [0, 0.85, -1.6], [0, 0.65, -2.15], 0.03, 0.015, 4);
+  // spikes fanning from both sides of the tail tip
+  for (const s of [-1, 1]) for (let i = 0; i < 3; i++) seg(tail4, old, [s * 0.1, 0, -0.2 - i * 0.25], [s * (0.45 - i * 0.08), 0.05, -0.35 - i * 0.3], 0.05, 0, 4);
 
   return {
     root,
